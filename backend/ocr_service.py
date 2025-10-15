@@ -286,3 +286,5 @@ def extract_passport_data(file_path: str, content_type: str) -> list:
         raise HTTPException(status_code=500, detail="Failed to produce any results from the uploaded file.")
 
     return results
+
+# export GOOGLE_APPLICATION_CREDENTIALS="google-credentials.json"
