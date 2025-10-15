@@ -1,0 +1,19 @@
+
+# Backend (Python)
+__pycache__/
+alembic/
+venv/
+*.pyc
+google-credentials.json
+travel_app.db
+alembic.ini
+.env
+
+# Frontend (JavaScript)
+node_modules/
+
+# IDE/System Files
+.vscode/
+
+
+
