@@ -1,6 +1,5 @@
+# --------------- START OF FILE: schemas.py ---------------
 
-
-# /schemas.py
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import date, datetime
@@ -33,7 +32,7 @@ class PassportCreate(PassportBase):
 class Passport(PassportBase):
     id: int
     owner_id: int
-    voyages: List[Voyage] = [] # This line is added
+    voyages: List[Voyage] = []
     class Config:
         from_attributes = True
 
@@ -57,7 +56,7 @@ class UserUpdate(BaseModel):
 class User(UserBase):
     id: int
     role: str
-    passports: List["Passport"] = [] # Added quotes to fix forward reference
+    passports: List["Passport"] = []
     voyages: List[Voyage] = []
     class Config:
         from_attributes = True
@@ -80,26 +79,23 @@ class Invitation(InvitationCreate):
     class Config:
         from_attributes = True
 
-
 class InvitationUpdate(BaseModel):
     expires_at: Optional[datetime] = None
     is_used: Optional[bool] = None
-
 
 class OcrFailure(BaseModel):
     page_number: int
     detail: str
 
-
-# ADD THIS NEW SCHEMA
 class OcrSuccess(BaseModel):
     page_number: int
     data: Passport
 
-# UPDATE THIS SCHEMA
 class OcrUploadResponse(BaseModel):
-    successes: List[OcrSuccess] # This now uses the new OcrSuccess schema
+    successes: List[OcrSuccess]
     failures: List[OcrFailure]
 
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
+
+# --------------- END OF FILE: schemas.py ---------------

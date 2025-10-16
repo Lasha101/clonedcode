@@ -1,8 +1,9 @@
+# --------------- START OF FILE: main.py ---------------
+
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
-import tempfile
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks # REMOVED: No longer needed
 from pydantic import ValidationError
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,7 +76,7 @@ app.add_middleware(
 
 # --- Authentication Routes ---
 @app.post("/token", response_model=schemas.Token)
-@limiter.limit("2/minute")
+@limiter.limit("5/minute")
 def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -168,28 +169,31 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
 def create_passport(passport: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_passport(db=db, passport=passport, user_id=current_user.id)
 
+# ####################################################################
+# ################ THIS IS THE MODIFIED ENDPOINT #####################
+# ####################################################################
 @app.post("/passports/upload-and-extract/", response_model=schemas.OcrUploadResponse)
 async def upload_and_extract_passport(
-    background_tasks: BackgroundTasks,
     destination: Optional[str] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
+    # Read file content directly into memory
+    file_content = await file.read()
+    if not file_content:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp_file:
-            while content := await file.read(1024 * 1024):  # Read in 1MB chunks
-                temp_file.write(content)
-            temp_file_path = temp_file.name
-    except Exception:
-        raise HTTPException(status_code=500, detail="Could not save uploaded file to disk.")
+        # Call the new synchronous OCR service function
+        extraction_results = ocr_service.extract_document_data_sync(
+            file_content=file_content,
+            content_type=file.content_type
+        )
+    except Exception as e:
+        # Catch potential errors from the OCR service itself (e.g., API errors)
+        raise HTTPException(status_code=500, detail=f"An error occurred during document processing: {str(e)}")
 
-    background_tasks.add_task(os.unlink, temp_file_path)
-
-    extraction_results = ocr_service.extract_passport_data(
-        file_path=temp_file_path,
-        content_type=file.content_type
-    )
 
     successes = []
     failures = []
@@ -221,9 +225,15 @@ async def upload_and_extract_passport(
                 failures.append({"page_number": page_number, "detail": error_message})
             
             except Exception as e:
-                failures.append({"page_number": page_number, "detail": f"A database error occurred: {str(e)}"})
+                # This will catch specific database errors like the CONFLICT from crud.py
+                detail = getattr(e, 'detail', f"A database error occurred: {str(e)}")
+                failures.append({"page_number": page_number, "detail": detail})
     
     return {"successes": successes, "failures": failures}
+# ####################################################################
+# ##################### END OF MODIFICATION ##########################
+# ####################################################################
+
 
 @app.get("/export/data")
 def export_data(
@@ -338,10 +348,12 @@ def get_unique_destinations(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     target_user_id = current_user.id
-    if current_user.role == "admin" and user_id is not None:
+    # Admin can specify a user_id, otherwise it defaults to all users (None)
+    if current_user.role == "admin":
         target_user_id = user_id
     
     return crud.get_destinations_by_user_id(db, user_id=target_user_id)
+
 
 # --- File Upload Route ---
 UPLOAD_DIR = "uploads"
@@ -370,10 +382,11 @@ def create_invitation(invitation: schemas.InvitationCreate, db: Session = Depend
         raise HTTPException(status_code=400, detail="Un utilisateur avec cet email existe déjà.")
 
     existing_invitation = crud.get_invitation_by_email(db, email=invitation.email)
-    if existing_invitation and not existing_invitation.is_used:
+    if existing_invitation and not existing_invitation.is_used and not (existing_invitation.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc)):
         raise HTTPException(status_code=400, detail="Une invitation active pour cet email existe déjà.")
     
     return crud.create_invitation(db=db, email=invitation.email)
+
 
 @app.get("/admin/invitations/", response_model=list[schemas.Invitation], dependencies=[Depends(auth.require_admin)])
 def read_invitations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -397,3 +410,5 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 @app.get("/admin/filterable-users", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
+
+# --------------- END OF FILE: main.py ---------------

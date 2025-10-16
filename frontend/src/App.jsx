@@ -784,7 +784,7 @@
 
 
 
-
+// --------------- START OF FILE: ../frontend/src/App.jsx ---------------
 
 import React, { useState, useEffect, useCallback } from 'react';
 
@@ -1582,3 +1582,5 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
+
+// --------------- END OF FILE: ../frontend/src/App.jsx ---------------
