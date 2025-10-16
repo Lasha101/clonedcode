@@ -786,16 +786,13 @@
 
 
 
-
 import React, { useState, useEffect, useCallback } from 'react';
 
-// const API_URL = '/api';
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://127.0.0.1:8000';
 
 // --- STYLES COMPONENT (Integrated) ---
 const GlobalStyles = () => (
     <style>{`
-        /* ... All CSS from the original prompt remains unchanged ... */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
@@ -812,7 +809,6 @@ const GlobalStyles = () => (
             --warning-color: #ffc107;
             --font-family: 'Inter', sans-serif;
         }
-        /* ... etc ... */
         body { font-family: var(--font-family); background-color: var(--background-color); color: var(--text-color); margin: 0; line-height: 1.6; }
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         .app-header { display: flex; justify-content: space-between; align-items: center; background-color: var(--surface-color); padding: 1.5rem 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); margin-bottom: 2rem; }
@@ -870,7 +866,6 @@ const GlobalStyles = () => (
     `}</style>
 );
 
-// --- NEW: Translation mapping for column headers ---
 const columnTranslations = {
     first_name: 'Prénom',
     last_name: 'Nom de famille',
@@ -891,7 +886,6 @@ const columnTranslations = {
     actions: 'Actions'
 };
 
-
 // --- HELPER COMPONENTS & ICONS ---
 const EyeIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>);
 const EyeOffIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>);
@@ -909,7 +903,6 @@ function PasswordInput({ value, onChange, name, placeholder, required = false })
 
 const SuccessIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>);
 const FailureIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>);
-
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -952,13 +945,11 @@ function Login({ setToken, fetchUser }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    // --> ADD isLoading state to manage the button
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        // --> SET isLoading to true to disable the button
         setIsLoading(true);
         const formData = new URLSearchParams({ username, password });
         try {
@@ -969,7 +960,6 @@ function Login({ setToken, fetchUser }) {
                 setToken(data.access_token);
                 fetchUser();
             } else {
-                // --> CHECK for 429 status code for rate limiting
                 if (response.status === 429) {
                     setError("Trop de tentatives de connexion. Veuillez réessayer dans une minute.");
                 } else {
@@ -980,7 +970,6 @@ function Login({ setToken, fetchUser }) {
         } catch (err) {
             setError('Une erreur est survenue. Veuillez réessayer.');
         } finally {
-            // --> SET isLoading to false in the finally block to re-enable the button
             setIsLoading(false);
         }
     };
@@ -998,7 +987,6 @@ function Login({ setToken, fetchUser }) {
                     <label>Mot de passe</label>
                     <PasswordInput name="password" value={password} onChange={e => setPassword(e.target.value)} required={true} />
                 </div>
-                {/* --> UPDATE button to be disabled and show loading text */}
                 <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={isLoading}>
                     {isLoading ? 'Connexion en cours...' : 'Se connecter'}
                 </button>
@@ -1006,7 +994,6 @@ function Login({ setToken, fetchUser }) {
         </div>
     );
 }
-
 
 function RegistrationPage({ registrationToken }) {
     const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', phone_number: '', user_name: '', password: '' });
@@ -1109,7 +1096,6 @@ function Dashboard({ user, token, fetchUser }) {
     );
 }
 
-
 // --- DASHBOARD SUB-COMPONENTS ---
 function AccountEditor({ user, token, fetchUser }) {
     const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', phone_number: '', password: '' });
@@ -1147,7 +1133,6 @@ function OcrUploader({ token, onUploadSuccess }) {
         };
         fetchDestinations();
     }, [token]);
-
 
     const handleFileChange = (e) => {
         setFile(e.target.files[0]);
@@ -1245,10 +1230,10 @@ function OcrUploader({ token, onUploadSuccess }) {
                         Traitement Terminé : {uploadResults.successes.length} réussis, {uploadResults.failures.length} échoués.
                     </p>
                     <ul className="results-list">
-                        {uploadResults.successes.map(passport => (
-                            <li key={passport.id} className="result-success">
+                        {uploadResults.successes.map(success => (
+                            <li key={success.data.id} className="result-success">
                                 <span className="result-icon"><SuccessIcon /></span>
-                                <span>Page traitée avec succès : Passeport créé pour <b>{passport.first_name} {passport.last_name}</b> (N° : {passport.passport_number}).</span>
+                                <span><b>Page {success.page_number}</b> traitée avec succès : Passeport créé pour <b>{success.data.first_name} {success.data.last_name}</b> (N° : {success.data.passport_number}).</span>
                             </li>
                         ))}
                         {uploadResults.failures.map((failure, index) => (
@@ -1266,7 +1251,6 @@ function OcrUploader({ token, onUploadSuccess }) {
         </div>
     );
 }
-
 
 function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [items, setItems] = useState([]);
@@ -1382,7 +1366,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     )}
                 </div>
             )}
-
 
             <div className="table-container">
                 <table className="table">

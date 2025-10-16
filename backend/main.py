@@ -4,8 +4,7 @@ from contextlib import asynccontextmanager
 import tempfile
 from fastapi import BackgroundTasks
 from pydantic import ValidationError
-# --> IMPORT Request
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Request 
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -15,26 +14,23 @@ from datetime import datetime, timezone
 import crud, models, schemas, auth
 from database import SessionLocal, engine, get_db
 from typing import Optional, List
-import ocr_service # Import the new service
+import ocr_service
 
-# --> IMPORT everything needed from slowapi
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import os
-from dotenv import load_dotenv # You'll need to install this library
+from dotenv import load_dotenv
 
-
-# Load environment variables from a .env file (for local development)
+# Load environment variables from a .env file
 load_dotenv()
 
 # Create all database tables
 models.Base.metadata.create_all(bind=engine)
 
-# --> INITIALIZE the limiter to identify users by their IP address
+# Initialize the limiter to identify users by their IP address
 limiter = Limiter(key_func=get_remote_address)
 
-# --- Lifespan Context Manager (Modern way for startup/shutdown events) ---
+# --- Lifespan Context Manager (for startup/shutdown events) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to run on startup
@@ -42,10 +38,8 @@ async def lifespan(app: FastAPI):
     # Check if admin user exists and create one if not
     admin_user = crud.get_user_by_username(db, username="admin")
     if not admin_user:
-        # Get the admin password from an environment variable
         ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
         if not ADMIN_PASSWORD:
-            # Handle the case where the password isn't set, maybe log a warning
             print("WARNING: ADMIN_PASSWORD environment variable not set. Admin user not created.")
         else:
             admin = schemas.UserCreate(
@@ -54,21 +48,18 @@ async def lifespan(app: FastAPI):
                 email="admin@example.com",
                 phone_number="1234567890",
                 user_name="admin",
-                password=ADMIN_PASSWORD # Use the variable here
+                password=ADMIN_PASSWORD
             )
-            # Admin is created without an invitation token
             crud.create_user(db=db, user=admin, role="admin", token=None)
     db.close()
     yield
     # Code to run on shutdown (if any)
 
-
 app = FastAPI(lifespan=lifespan)
 
-# --> SET the limiter on the app state and add the exception handler
+# Set the limiter on the app state and add the exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
 
 # --- CORS Middleware ---
 origins = ["*"]
@@ -84,9 +75,7 @@ app.add_middleware(
 
 # --- Authentication Routes ---
 @app.post("/token", response_model=schemas.Token)
-# --> APPLY the rate limit decorator. This allows 5 attempts per minute.
 @limiter.limit("2/minute")
-# --> ADD 'request: Request' to the function signature
 def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -101,16 +90,13 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
 # --- User Routes ---
 @app.post("/users/", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session = Depends(get_db)):
-    # 1. Get and validate the invitation first.
     invitation = crud.get_invitation_by_token(db, token)
     if not invitation or invitation.is_used or invitation.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Jeton d'inscription invalide ou expiré.")
 
-    # 2. Check if the email from the invitation matches the one in the form.
     if invitation.email != user.email:
         raise HTTPException(status_code=400, detail="L'email d'inscription ne correspond pas à l'email de l'invitation.")
 
-    # 3. Now, check for existing users.
     db_user_by_email = crud.get_user_by_email(db, email=user.email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email déjà enregistré")
@@ -119,10 +105,8 @@ def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
 
-    # 4. Create the user.
     created_user = crud.create_user(db=db, user=user, role="user")
     
-    # 5. Delete the invitation now that the user is created.
     db.delete(invitation)
     db.commit()
 
@@ -169,8 +153,6 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
 
 @app.post("/admin/users/", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
 def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # This endpoint is protected and can only be accessed by an admin.
-    # It does not require an invitation token.
     db_user_by_email = crud.get_user_by_email(db, email=user.email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email déjà enregistré")
@@ -179,73 +161,12 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
 
-    # The 'role' can be passed in the user object if you want admins to create other admins
     return crud.create_user(db=db, user=user, role=user.role if hasattr(user, 'role') else 'user')
 
 # --- Passport Routes ---
 @app.post("/passports/", response_model=schemas.Passport)
 def create_passport(passport: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_passport(db=db, passport=passport, user_id=current_user.id)
-
-# # /passports/upload-and-extract/ endpoint
-# @app.post("/passports/upload-and-extract/", response_model=schemas.OcrUploadResponse)
-# async def upload_and_extract_passport(
-#     destination: Optional[str] = Form(None),
-#     file: UploadFile = File(...),
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(auth.get_current_active_user)
-# ):
-#     """
-#     Receives a passport image or a single/multi-page PDF, extracts data from
-#     each page, and creates new passport records for each successful extraction.
-#     Returns a summary of successful and failed pages.
-#     """
-#     contents = await file.read()
-    
-#     extraction_results = ocr_service.extract_passport_data(
-#         file_content=contents,
-#         content_type=file.content_type
-#     )
-
-#     successes = []
-#     failures = []
-
-#     for result in extraction_results:
-#         page_number = result.get("page_number")
-#         if "data" in result:
-#             passport_data = result["data"]
-            
-#             if destination:
-#                 passport_data["destination"] = destination
-            
-#             passport_create_schema = schemas.PassportCreate(**passport_data)
-#             try:
-#                 created_passport = crud.create_user_passport(db=db, passport=passport_create_schema, user_id=current_user.id)
-#                 successes.append(created_passport)
-#             except HTTPException as e:
-#                 failures.append({"page_number": page_number, "detail": e.detail})
-#         elif "error" in result:
-#             failures.append({"page_number": page_number, "detail": result["error"]})
-
-#     return {"successes": successes, "failures": failures}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 @app.post("/passports/upload-and-extract/", response_model=schemas.OcrUploadResponse)
 async def upload_and_extract_passport(
@@ -255,16 +176,6 @@ async def upload_and_extract_passport(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    """
-    Receives a passport image or a multi-page PDF, streams it to a temporary file,
-    extracts data from each page, and creates new passport records.
-    
-    This function handles errors on a per-page basis:
-    - Successful extractions are saved to the database.
-    - Pages with OCR errors or data validation errors are rejected and reported.
-    The entire operation does not crash if some pages are invalid.
-    """
-    # 1. Stream the uploaded file to a temporary file on disk to save memory.
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp_file:
             while content := await file.read(1024 * 1024):  # Read in 1MB chunks
@@ -273,10 +184,8 @@ async def upload_and_extract_passport(
     except Exception:
         raise HTTPException(status_code=500, detail="Could not save uploaded file to disk.")
 
-    # 2. Schedule the temporary file to be deleted after the response is sent.
     background_tasks.add_task(os.unlink, temp_file_path)
 
-    # 3. Call the OCR service to process the file from its disk path.
     extraction_results = ocr_service.extract_passport_data(
         file_path=temp_file_path,
         content_type=file.content_type
@@ -285,152 +194,37 @@ async def upload_and_extract_passport(
     successes = []
     failures = []
 
-    # 4. Loop through results and handle each page individually.
     for result in extraction_results:
         page_number = result.get("page_number")
 
-        # Handle pages where the OCR service itself reported an error.
         if "error" in result:
             failures.append({"page_number": page_number, "detail": result["error"]})
-            continue  # Skip to the next page
+            continue
 
         if "data" in result:
             passport_data = result["data"]
             
-            # Use a try/except block to isolate validation and database errors.
             try:
-                # Add the optional destination if provided.
                 if destination:
                     passport_data["destination"] = destination
                 
-                # a. Attempt to validate the data using your Pydantic schema.
                 passport_create_schema = schemas.PassportCreate(**passport_data)
 
-                # b. If validation succeeds, create the passport in the database.
                 created_passport = crud.create_user_passport(
                     db=db, passport=passport_create_schema, user_id=current_user.id
                 )
-                successes.append(created_passport)
+                successes.append({"page_number": page_number, "data": created_passport})
 
             except ValidationError as e:
-                # c. If Pydantic validation fails, record it as a failure.
-                # We extract the first, most relevant error message.
                 first_error = e.errors()[0]
                 error_message = f"Validation Error on field '{first_error['loc'][0]}': {first_error['msg']}"
                 failures.append({"page_number": page_number, "detail": error_message})
             
             except Exception as e:
-                # d. Catch any other unexpected errors during DB creation.
                 failures.append({"page_number": page_number, "detail": f"A database error occurred: {str(e)}"})
     
-    # 5. Return a successful response with lists of successes and failures.
     return {"successes": successes, "failures": failures}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# @app.post("/passports/upload-and-extract/", response_model=schemas.OcrUploadResponse)
-# async def upload_and_extract_passport(
-#     background_tasks: BackgroundTasks,
-#     destination: Optional[str] = Form(None),
-#     file: UploadFile = File(...),
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(auth.get_current_active_user)
-# ):
-#     """
-#     Receives a passport image or a multi-page PDF, streams it to a temporary file,
-#     extracts data from each page, and creates new passport records.
-    
-#     This function handles errors on a per-page basis:
-#     - Successful extractions are saved to the database.
-#     - Pages with OCR errors or data validation errors are rejected and reported.
-#     The entire operation does not crash if some pages are invalid.
-#     """
-#     # 1. Stream the uploaded file to a temporary file on disk to save memory.
-#     try:
-#         with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp_file:
-#             while content := await file.read(1024 * 1024):  # Read in 1MB chunks
-#                 temp_file.write(content)
-#             temp_file_path = temp_file.name
-#     except Exception:
-#         raise HTTPException(status_code=500, detail="Could not save uploaded file to disk.")
-
-#     # 2. Schedule the temporary file to be deleted after the response is sent.
-#     background_tasks.add_task(os.unlink, temp_file_path)
-
-#     # 3. Call the OCR service to process the file from its disk path.
-#     extraction_results = ocr_service.extract_passport_data(
-#         file_path=temp_file_path,
-#         content_type=file.content_type
-#     )
-
-#     successes = []
-#     failures = []
-
-#     # 4. Loop through results and handle each page individually.
-#     for result in extraction_results:
-#         page_number = result.get("page_number")
-
-#         # Handle pages where the OCR service itself reported an error.
-#         if "error" in result:
-#             failures.append({"page_number": page_number, "detail": result["error"]})
-#             continue  # Skip to the next page
-
-#         if "data" in result:
-#             passport_data = result["data"]
-            
-#             # Use a try/except block to isolate validation and database errors.
-#             try:
-#                 # Add the optional destination if provided.
-#                 if destination:
-#                     passport_data["destination"] = destination
-                
-#                 # a. Attempt to validate the data using your Pydantic schema.
-#                 passport_create_schema = schemas.PassportCreate(**passport_data)
-
-#                 # b. If validation succeeds, create the passport in the database.
-#                 created_passport = crud.create_user_passport(
-#                     db=db, passport=passport_create_schema, user_id=current_user.id
-#                 )
-                
-#                 # --- THIS IS THE MODIFIED LINE ---
-#                 # We now append a dictionary to include the page number with the success data.
-#                 successes.append({"page_number": page_number, "data": created_passport})
-
-#             except ValidationError as e:
-#                 # c. If Pydantic validation fails, record it as a failure.
-#                 # We extract the first, most relevant error message.
-#                 first_error = e.errors()[0]
-#                 error_message = f"Validation Error on field '{first_error['loc'][0]}': {first_error['msg']}"
-#                 failures.append({"page_number": page_number, "detail": error_message})
-            
-#             except Exception as e:
-#                 # d. Catch any other unexpected errors during DB creation.
-#                 failures.append({"page_number": page_number, "detail": f"A database error occurred: {str(e)}"})
-    
-#     # 5. Return a successful response with lists of successes and failures.
-#     return {"successes": successes, "failures": failures}
-
-
-
-# /export/data endpoint
 @app.get("/export/data")
 def export_data(
     destination: Optional[str] = None,
@@ -442,7 +236,6 @@ def export_data(
 ):
     effective_user_id = current_user.id
     if current_user.role == "admin":
-        # If admin provides a user_id, use it. Otherwise, it will be None (all users).
         effective_user_id = user_id
     
     filtered_data = crud.filter_data(db, destination, effective_user_id, first_name, last_name)
@@ -538,7 +331,6 @@ def delete_voyage(voyage_id: int, db: Session = Depends(get_db), current_user: m
         raise HTTPException(status_code=403, detail="Non autorisé à supprimer ce voyage")
     return crud.delete_voyage(db=db, voyage_id=voyage_id)
 
-
 @app.get("/destinations/", response_model=List[str])
 def get_unique_destinations(
     user_id: Optional[int] = Query(None),
@@ -551,7 +343,6 @@ def get_unique_destinations(
     
     return crud.get_destinations_by_user_id(db, user_id=target_user_id)
 
-
 # --- File Upload Route ---
 UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
@@ -563,7 +354,6 @@ async def create_upload_file(file: UploadFile = File(...), current_user: models.
     with open(file_location, "wb+") as file_object:
         file_object.write(file.file.read())
     return {"info": f"fichier '{file.filename}' sauvegardé à '{file_location}'"}
-
 
 @app.get("/invitations/{token}", response_model=schemas.Invitation)
 def get_invitation(token: str, db: Session = Depends(get_db)):
@@ -585,7 +375,6 @@ def create_invitation(invitation: schemas.InvitationCreate, db: Session = Depend
     
     return crud.create_invitation(db=db, email=invitation.email)
 
-
 @app.get("/admin/invitations/", response_model=list[schemas.Invitation], dependencies=[Depends(auth.require_admin)])
 def read_invitations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     invitations = crud.get_invitations(db, skip=skip, limit=limit)
@@ -604,7 +393,6 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
     if db_invitation is None:
         raise HTTPException(status_code=404, detail="Invitation non trouvée")
     return db_invitation
-
 
 @app.get("/admin/filterable-users", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_filterable_users(db: Session = Depends(get_db)):
