@@ -1,9 +1,6 @@
-# --------------- START OF FILE: main.py ---------------
-
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
-from fastapi import BackgroundTasks # REMOVED: No longer needed
 from pydantic import ValidationError
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,27 +13,31 @@ import crud, models, schemas, auth
 from database import SessionLocal, engine, get_db
 from typing import Optional, List
 import ocr_service
+import logging # Added for better logging
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file
+# Load environment variables
 load_dotenv()
 
-# Create all database tables
+# Setup basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create database tables
 models.Base.metadata.create_all(bind=engine)
 
-# Initialize the limiter to identify users by their IP address
+# Initialize the rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
-# --- Lifespan Context Manager (for startup/shutdown events) ---
+# --- Lifespan for application startup/shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Code to run on startup
     db = SessionLocal()
-    # Check if admin user exists and create one if not
+    # Create a default admin user on startup if one doesn't exist
     admin_user = crud.get_user_by_username(db, username="admin")
     if not admin_user:
         ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
@@ -54,17 +55,15 @@ async def lifespan(app: FastAPI):
             crud.create_user(db=db, user=admin, role="admin", token=None)
     db.close()
     yield
-    # Code to run on shutdown (if any)
+    # Code to run on shutdown can go here
 
+# --- FastAPI App Initialization ---
 app = FastAPI(lifespan=lifespan)
-
-# Set the limiter on the app state and add the exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# --- CORS Middleware ---
-origins = ["*"]
-
+# --- CORS Middleware Configuration ---
+origins = ["*"] # Allow all origins for simplicity
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -94,23 +93,17 @@ def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session
     invitation = crud.get_invitation_by_token(db, token)
     if not invitation or invitation.is_used or invitation.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Jeton d'inscription invalide ou expiré.")
-
     if invitation.email != user.email:
         raise HTTPException(status_code=400, detail="L'email d'inscription ne correspond pas à l'email de l'invitation.")
-
     db_user_by_email = crud.get_user_by_email(db, email=user.email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email déjà enregistré")
-
     db_user_by_username = crud.get_user_by_username(db, username=user.user_name)
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
-
     created_user = crud.create_user(db=db, user=user, role="user")
-    
     db.delete(invitation)
     db.commit()
-
     return created_user
 
 @app.get("/users/me", response_model=schemas.User)
@@ -121,15 +114,10 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
+# --- Admin User Management Routes ---
 @app.get("/admin/users/", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
-def read_users(
-    skip: int = 0,
-    limit: int = 100,
-    name_filter: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    users = crud.get_users(db, skip=skip, limit=limit, name_filter=name_filter)
-    return users
+def read_users(skip: int = 0, limit: int = 100, name_filter: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    return crud.get_users(db, skip=skip, limit=limit, name_filter=name_filter)
 
 @app.delete("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
 def delete_user(user_id: int, db: Session = Depends(get_db)):
@@ -146,7 +134,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     return db_user
 
 @app.put("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
-def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
     db_user = crud.update_user(db=db, user_id=user_id, user_update=user_update)
     if db_user is None:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
@@ -157,11 +145,9 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
     db_user_by_email = crud.get_user_by_email(db, email=user.email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email déjà enregistré")
-
     db_user_by_username = crud.get_user_by_username(db, username=user.user_name)
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
-
     return crud.create_user(db=db, user=user, role=user.role if hasattr(user, 'role') else 'user')
 
 # --- Passport Routes ---
@@ -169,9 +155,7 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
 def create_passport(passport: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_passport(db=db, passport=passport, user_id=current_user.id)
 
-# ####################################################################
-# ################ THIS IS THE MODIFIED ENDPOINT #####################
-# ####################################################################
+# --- OCR UPLOAD AND EXTRACTION ROUTE ---
 @app.post("/passports/upload-and-extract/", response_model=schemas.OcrUploadResponse)
 async def upload_and_extract_passport(
     destination: Optional[str] = Form(None),
@@ -179,25 +163,26 @@ async def upload_and_extract_passport(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    # Read file content directly into memory
+    # Read the entire file into memory. This approach doesn't need temp files.
     file_content = await file.read()
     if not file_content:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
     try:
-        # Call the new synchronous OCR service function
-        extraction_results = ocr_service.extract_document_data_sync(
+        # Call the new page-by-page service function
+        extraction_results = ocr_service.extract_data_page_by_page(
             file_content=file_content,
             content_type=file.content_type
         )
     except Exception as e:
-        # Catch potential errors from the OCR service itself (e.g., API errors)
+        # Catch errors from the service, such as 'poppler' not being installed
+        logger.error(f"Error during page-by-page extraction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An error occurred during document processing: {str(e)}")
-
 
     successes = []
     failures = []
 
+    # Process results from the OCR service
     for result in extraction_results:
         page_number = result.get("page_number")
 
@@ -207,49 +192,36 @@ async def upload_and_extract_passport(
 
         if "data" in result:
             passport_data = result["data"]
-            
             try:
                 if destination:
                     passport_data["destination"] = destination
                 
                 passport_create_schema = schemas.PassportCreate(**passport_data)
-
                 created_passport = crud.create_user_passport(
                     db=db, passport=passport_create_schema, user_id=current_user.id
                 )
                 successes.append({"page_number": page_number, "data": created_passport})
-
             except ValidationError as e:
                 first_error = e.errors()[0]
                 error_message = f"Validation Error on field '{first_error['loc'][0]}': {first_error['msg']}"
                 failures.append({"page_number": page_number, "detail": error_message})
-            
             except Exception as e:
-                # This will catch specific database errors like the CONFLICT from crud.py
                 detail = getattr(e, 'detail', f"A database error occurred: {str(e)}")
                 failures.append({"page_number": page_number, "detail": detail})
     
     return {"successes": successes, "failures": failures}
-# ####################################################################
-# ##################### END OF MODIFICATION ##########################
-# ####################################################################
-
 
 @app.get("/export/data")
 def export_data(
-    destination: Optional[str] = None,
-    user_id: Optional[int] = None,
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user)
+    destination: Optional[str] = None, user_id: Optional[int] = None,
+    first_name: Optional[str] = None, last_name: Optional[str] = None,
+    db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)
 ):
     effective_user_id = current_user.id
     if current_user.role == "admin":
         effective_user_id = user_id
     
     filtered_data = crud.filter_data(db, destination, effective_user_id, first_name, last_name)
-    
     if not filtered_data:
         raise HTTPException(status_code=404, detail="Aucune donnée de passeport trouvée pour les critères donnés")
     
@@ -258,33 +230,27 @@ def export_data(
     df.to_csv(stream, index=False)
     
     filename_parts = ["passeports"]
-    if destination:
-        filename_parts.append(destination.replace(' ', '_').lower())
+    if destination: filename_parts.append(destination.replace(' ', '_').lower())
 
     if current_user.role == 'admin':
         if user_id:
             filtered_user = crud.get_user(db, user_id)
-            if filtered_user:
-                filename_parts.append(f"pour_{filtered_user.user_name.lower()}")
-            else:
-                filename_parts.append(f"pour_utilisateur_{user_id}")
+            if filtered_user: filename_parts.append(f"pour_{filtered_user.user_name.lower()}")
+            else: filename_parts.append(f"pour_utilisateur_{user_id}")
         else:
-            filename_parts.append("rapport")
+            filename_parts.append("rapport_complet")
     else:
         filename_parts.append(f"pour_{current_user.user_name.lower()}")
 
     filename = f"{'_'.join(filename_parts)}.csv"
-        
     response = StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 @app.get("/passports/", response_model=list[schemas.Passport])
 def read_passports(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user),
-    user_filter: Optional[str] = None,
-    voyage_filter: Optional[str] = None
+    db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user),
+    user_filter: Optional[str] = None, voyage_filter: Optional[str] = None
 ):
     if current_user.role == "admin":
         return crud.get_passports(db=db, user_filter=user_filter, voyage_filter=voyage_filter)
@@ -308,17 +274,13 @@ def delete_passport(passport_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=403, detail="Non autorisé à supprimer ce passeport")
     return crud.delete_passport(db=db, passport_id=passport_id)
 
-# --- Voyage Routes ---
+# --- Voyage and Destination Routes ---
 @app.post("/voyages/", response_model=schemas.Voyage)
 def create_voyage(voyage: schemas.VoyageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_voyage(db=db, voyage=voyage, user_id=current_user.id, passport_ids=voyage.passport_ids)
 
 @app.get("/voyages/", response_model=list[schemas.Voyage])
-def read_voyages(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user),
-    user_filter: Optional[str] = None
-):
+def read_voyages(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user), user_filter: Optional[str] = None):
     if current_user.role == "admin":
         return crud.get_voyages(db=db, user_filter=user_filter)
     return crud.get_voyages_by_user(db=db, user_id=current_user.id)
@@ -342,31 +304,13 @@ def delete_voyage(voyage_id: int, db: Session = Depends(get_db), current_user: m
     return crud.delete_voyage(db=db, voyage_id=voyage_id)
 
 @app.get("/destinations/", response_model=List[str])
-def get_unique_destinations(
-    user_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
+def get_unique_destinations(user_id: Optional[int] = Query(None), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     target_user_id = current_user.id
-    # Admin can specify a user_id, otherwise it defaults to all users (None)
     if current_user.role == "admin":
         target_user_id = user_id
-    
     return crud.get_destinations_by_user_id(db, user_id=target_user_id)
 
-
-# --- File Upload Route ---
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
-
-@app.post("/uploadfile/")
-async def create_upload_file(file: UploadFile = File(...), current_user: models.User = Depends(auth.get_current_active_user)):
-    file_location = os.path.join(UPLOAD_DIR, f"{current_user.user_name}_{file.filename}")
-    with open(file_location, "wb+") as file_object:
-        file_object.write(file.file.read())
-    return {"info": f"fichier '{file.filename}' sauvegardé à '{file_location}'"}
-
+# --- Invitation Routes ---
 @app.get("/invitations/{token}", response_model=schemas.Invitation)
 def get_invitation(token: str, db: Session = Depends(get_db)):
     invitation = crud.get_invitation_by_token(db, token)
@@ -374,24 +318,19 @@ def get_invitation(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invitation non trouvée ou invalide.")
     return invitation
 
-# --- Admin-specific Routes ---
 @app.post("/admin/invitations", response_model=schemas.Invitation, dependencies=[Depends(auth.require_admin)])
 def create_invitation(invitation: schemas.InvitationCreate, db: Session = Depends(get_db)):
     existing_user = crud.get_user_by_email(db, email=invitation.email)
     if existing_user:
         raise HTTPException(status_code=400, detail="Un utilisateur avec cet email existe déjà.")
-
     existing_invitation = crud.get_invitation_by_email(db, email=invitation.email)
     if existing_invitation and not existing_invitation.is_used and not (existing_invitation.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc)):
         raise HTTPException(status_code=400, detail="Une invitation active pour cet email existe déjà.")
-    
     return crud.create_invitation(db=db, email=invitation.email)
-
 
 @app.get("/admin/invitations/", response_model=list[schemas.Invitation], dependencies=[Depends(auth.require_admin)])
 def read_invitations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    invitations = crud.get_invitations(db, skip=skip, limit=limit)
-    return invitations
+    return crud.get_invitations(db, skip=skip, limit=limit)
 
 @app.put("/admin/invitations/{invitation_id}", response_model=schemas.Invitation, dependencies=[Depends(auth.require_admin)])
 def update_invitation(invitation_id: int, invitation_update: schemas.InvitationUpdate, db: Session = Depends(get_db)):
@@ -410,5 +349,3 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 @app.get("/admin/filterable-users", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
-
-# --------------- END OF FILE: main.py ---------------

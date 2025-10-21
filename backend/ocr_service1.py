@@ -183,110 +183,110 @@ def _extract_passport_data_from_image_bytes(image_bytes: bytes) -> dict:
 
 
 
-# def extract_passport_data(file_content: bytes, content_type: str) -> list:
-#     results = []
-
-#     if content_type.startswith("image/"):
-#         logger.info("Traitement en tant que fichier image unique.")
-#         try:
-#             extracted_data = _extract_passport_data_from_image_bytes(file_content)
-#             results.append({"page_number": 1, "data": extracted_data})
-#         except HTTPException as e:
-#             results.append({"page_number": 1, "error": e.detail})
-#         except Exception as e:
-#             logger.error(f"Erreur inattendue lors du traitement de l'image : {e}")
-#             results.append({"page_number": 1, "error": "Une erreur serveur inattendue est survenue lors du traitement."})
-
-#     elif content_type == "application/pdf":
-#         logger.info("Traitement en tant que fichier PDF.")
-#         try:
-#             pdf_document = fitz.open(stream=file_content, filetype="pdf")
-#             for page_num in range(len(pdf_document)):
-#                 page_index = page_num + 1
-#                 logger.info(f"--- Traitement de la page PDF {page_index} ---")
-#                 try:
-#                     page = pdf_document.load_page(page_num)
-#                     pix = page.get_pixmap(dpi=300)
-#                     image_bytes = pix.tobytes("png")
-#                     extracted_data = _extract_passport_data_from_image_bytes(image_bytes)
-#                     results.append({"page_number": page_index, "data": extracted_data})
-#                     logger.info(f"Données extraites avec succès de la page {page_index}.")
-#                 except HTTPException as e:
-#                     logger.warning(f"Échec de l'extraction des données de la page {page_index}: {e.detail}")
-#                     results.append({"page_number": page_index, "error": e.detail})
-#                 except Exception as e:
-#                     logger.error(f"Erreur inattendue sur la page {page_index}: {e}")
-#                     results.append({"page_number": page_index, "error": "Une erreur serveur inattendue est survenue."})
-#             pdf_document.close()
-#         except Exception as e:
-#             logger.error(f"Échec de l'ouverture ou de la lecture du fichier PDF : {e}")
-#             raise HTTPException(status_code=500, detail=f"Erreur lors de la lecture du fichier PDF : {e}")
-#     else:
-#         raise HTTPException(status_code=400, detail=f"Type de fichier non supporté : {content_type}.")
-
-#     if not results:
-#         raise HTTPException(status_code=500, detail="Échec de la production de résultats à partir du fichier téléchargé.")
-
-#     return results
-
-
-
-
-def extract_passport_data(file_path: str, content_type: str) -> list:
+def extract_passport_data(file_content: bytes, content_type: str) -> list:
     results = []
 
     if content_type.startswith("image/"):
-        logger.info("Processing as a single image file from disk.")
+        logger.info("Traitement en tant que fichier image unique.")
         try:
-            # --- CHANGED SECTION ---
-            # Read the bytes from the file on disk only when needed
-            with open(file_path, "rb") as f:
-                image_bytes = f.read()
-            extracted_data = _extract_passport_data_from_image_bytes(image_bytes)
-            # --- END OF CHANGED SECTION ---
+            extracted_data = _extract_passport_data_from_image_bytes(file_content)
             results.append({"page_number": 1, "data": extracted_data})
         except HTTPException as e:
             results.append({"page_number": 1, "error": e.detail})
         except Exception as e:
-            logger.error(f"Unexpected error while processing image from disk: {e}")
-            results.append({"page_number": 1, "error": "An unexpected server error occurred during processing."})
+            logger.error(f"Erreur inattendue lors du traitement de l'image : {e}")
+            results.append({"page_number": 1, "error": "Une erreur serveur inattendue est survenue lors du traitement."})
 
     elif content_type == "application/pdf":
-        logger.info("Processing as a PDF file from disk.")
+        logger.info("Traitement en tant que fichier PDF.")
         try:
-            # --- CHANGED SECTION ---
-            # Best Practice: Open the PDF directly from its file path.
-            # This is highly memory-efficient.
-            pdf_document = fitz.open(file_path)
-            # --- END OF CHANGED SECTION ---
+            pdf_document = fitz.open(stream=file_content, filetype="pdf")
             for page_num in range(len(pdf_document)):
                 page_index = page_num + 1
-                logger.info(f"--- Processing PDF page {page_index} ---")
+                logger.info(f"--- Traitement de la page PDF {page_index} ---")
                 try:
                     page = pdf_document.load_page(page_num)
                     pix = page.get_pixmap(dpi=300)
                     image_bytes = pix.tobytes("png")
                     extracted_data = _extract_passport_data_from_image_bytes(image_bytes)
                     results.append({"page_number": page_index, "data": extracted_data})
-                    logger.info(f"Successfully extracted data from page {page_index}.")
+                    logger.info(f"Données extraites avec succès de la page {page_index}.")
                 except HTTPException as e:
-                    logger.warning(f"Failed to extract data from page {page_index}: {e.detail}")
+                    logger.warning(f"Échec de l'extraction des données de la page {page_index}: {e.detail}")
                     results.append({"page_number": page_index, "error": e.detail})
                 except Exception as e:
-                    logger.error(f"Unexpected error on page {page_index}: {e}")
-                    results.append({"page_number": page_index, "error": "An unexpected server error occurred."})
+                    logger.error(f"Erreur inattendue sur la page {page_index}: {e}")
+                    results.append({"page_number": page_index, "error": "Une erreur serveur inattendue est survenue."})
             pdf_document.close()
         except Exception as e:
-            logger.error(f"Failed to open or read the PDF file from disk: {e}")
-            raise HTTPException(status_code=500, detail=f"Error reading PDF file: {e}")
+            logger.error(f"Échec de l'ouverture ou de la lecture du fichier PDF : {e}")
+            raise HTTPException(status_code=500, detail=f"Erreur lors de la lecture du fichier PDF : {e}")
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {content_type}.")
+        raise HTTPException(status_code=400, detail=f"Type de fichier non supporté : {content_type}.")
 
     if not results:
-        raise HTTPException(status_code=500, detail="Failed to produce any results from the uploaded file.")
+        raise HTTPException(status_code=500, detail="Échec de la production de résultats à partir du fichier téléchargé.")
 
     return results
 
-# export GOOGLE_APPLICATION_CREDENTIALS="google-credentials.json"
 
-# echo $GOOGLE_APPLICATION_CREDENTIALS
+
+
+# def extract_passport_data(file_path: str, content_type: str) -> list:
+#     results = []
+
+#     if content_type.startswith("image/"):
+#         logger.info("Processing as a single image file from disk.")
+#         try:
+#             # --- CHANGED SECTION ---
+#             # Read the bytes from the file on disk only when needed
+#             with open(file_path, "rb") as f:
+#                 image_bytes = f.read()
+#             extracted_data = _extract_passport_data_from_image_bytes(image_bytes)
+#             # --- END OF CHANGED SECTION ---
+#             results.append({"page_number": 1, "data": extracted_data})
+#         except HTTPException as e:
+#             results.append({"page_number": 1, "error": e.detail})
+#         except Exception as e:
+#             logger.error(f"Unexpected error while processing image from disk: {e}")
+#             results.append({"page_number": 1, "error": "An unexpected server error occurred during processing."})
+
+#     elif content_type == "application/pdf":
+#         logger.info("Processing as a PDF file from disk.")
+#         try:
+#             # --- CHANGED SECTION ---
+#             # Best Practice: Open the PDF directly from its file path.
+#             # This is highly memory-efficient.
+#             pdf_document = fitz.open(file_path)
+#             # --- END OF CHANGED SECTION ---
+#             for page_num in range(len(pdf_document)):
+#                 page_index = page_num + 1
+#                 logger.info(f"--- Processing PDF page {page_index} ---")
+#                 try:
+#                     page = pdf_document.load_page(page_num)
+#                     pix = page.get_pixmap(dpi=300)
+#                     image_bytes = pix.tobytes("png")
+#                     extracted_data = _extract_passport_data_from_image_bytes(image_bytes)
+#                     results.append({"page_number": page_index, "data": extracted_data})
+#                     logger.info(f"Successfully extracted data from page {page_index}.")
+#                 except HTTPException as e:
+#                     logger.warning(f"Failed to extract data from page {page_index}: {e.detail}")
+#                     results.append({"page_number": page_index, "error": e.detail})
+#                 except Exception as e:
+#                     logger.error(f"Unexpected error on page {page_index}: {e}")
+#                     results.append({"page_number": page_index, "error": "An unexpected server error occurred."})
+#             pdf_document.close()
+#         except Exception as e:
+#             logger.error(f"Failed to open or read the PDF file from disk: {e}")
+#             raise HTTPException(status_code=500, detail=f"Error reading PDF file: {e}")
+#     else:
+#         raise HTTPException(status_code=400, detail=f"Unsupported file type: {content_type}.")
+
+#     if not results:
+#         raise HTTPException(status_code=500, detail="Failed to produce any results from the uploaded file.")
+
+#     return results
+
+# # export GOOGLE_APPLICATION_CREDENTIALS="google-credentials.json"
+
+# # echo $GOOGLE_APPLICATION_CREDENTIALS
