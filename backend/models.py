@@ -1,4 +1,4 @@
-
+# --------------- START OF FILE: models.py ---------------
 
 # /models.py
 from sqlalchemy import Boolean, Column, Integer, Float, String, Date, ForeignKey, Table, DateTime
@@ -29,7 +29,7 @@ class Passport(Base):
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     birth_date = Column(Date)
-    delivery_date = Column(Date)
+    delivery_date = Column(Date, nullable=True) # <-- This was the change from last time
     expiration_date = Column(Date)
     nationality = Column(String, index=True)
     passport_number = Column(String, index=True, nullable=False) # Removed unique=True
@@ -37,7 +37,6 @@ class Passport(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="passports")
     voyages = relationship("Voyage", secondary=voyage_passport_association, back_populates="passports")
-
 
 class Voyage(Base):
     __tablename__ = "voyages"
@@ -54,3 +53,5 @@ class Invitation(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
+
+# --------------- END OF FILE: models.py ---------------

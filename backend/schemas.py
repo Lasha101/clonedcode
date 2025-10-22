@@ -21,7 +21,7 @@ class PassportBase(BaseModel):
     last_name: str
     birth_date: date
     expiration_date: date
-    delivery_date: date
+    delivery_date: Optional[date] = None # <-- This was the change from last time
     nationality: str
     passport_number: str
     confidence_score: Optional[float] = None

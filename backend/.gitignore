@@ -8,6 +8,7 @@ google-credentials.json
 travel_app.db
 alembic.ini
 .env
+file.txt
 merco.py
 merged_specific_files.txt
 # Frontend (JavaScript)
