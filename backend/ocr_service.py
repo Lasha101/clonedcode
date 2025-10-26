@@ -1,5 +1,3 @@
-# --------------- START OF FILE: ocr_service.py ---------------
-
 import os
 import re
 import io
@@ -27,93 +25,120 @@ except Exception as e:
     raise e
 
 
-# --- Parsing Helper Functions ---
+
+
+
+import re
+import json
+from typing import Dict, Optional
+from datetime import datetime
+
+# --- Helper function for date parsing (UNCHANGED) ---
 def _parse_date_from_mrz(date_str: str) -> Optional[str]:
-    if not date_str or len(date_str) != 6 or '<' in date_str: return None
+    """Helper to parse YYMMDD date string to YYYY-MM-DD."""
+    # Remove any potential '<'
+    date_str = date_str.replace('<', '')
+    if not date_str or len(date_str) != 6 or not date_str.isdigit():
+        return None
     try:
+        # Parse date parts
         year, month, day = int(date_str[0:2]), int(date_str[2:4]), int(date_str[4:6])
-        # Simple YY to YYYY conversion logic
+        
+        # Simple YY to YYYY conversion
         current_year_short = datetime.now().year % 100
-        # Assumes birth dates are in the past and expiry dates are in the future
-        # This logic might need refinement, but good for most cases.
-        year += 1900 if year > current_year_short + 10 else 2000
-        return datetime(year, month, day).strftime('%Y-%m-%d')
-    except (ValueError, TypeError): return None
+        if year > current_year_short + 15: # e.g., '82' -> 1982 (likely birth date)
+            year_full = 1900 + year
+        else: # e.g., '33' (expiry) or '05' (birth) -> 2033 or 2005
+            year_full = 2000 + year
+            
+        return datetime(year_full, month, day).strftime('%Y-%m-%d')
+    except (ValueError, TypeError):
+        return None
 
-# --- Removed _parse_date and _extract_value_from_line as they are no longer needed ---
-
-def _parse_passport_text(raw_text: str) -> Dict[str, Optional[str]]:
+# --- FINAL Parsing Function (WITH FIX) ---
+def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
     """
-    Extracts passport data exclusively from MRZ lines.
+    Extracts passport data from a single, concatenated MRZ string,
+    which may have missing '<' or extra initials/noise from OCR.
     """
     data = {
         "first_name": None, "last_name": None, "passport_number": None,
-        "birth_date": None, "delivery_date": None, "expiration_date": None,
-        "nationality": None,
+        "birth_date": None, "delivery_date": None, # delivery_date is not in the MRZ
+        "expiration_date": None, "nationality": None,
     }
-    
-    # Clean all lines and remove spaces/special chars
-    text_lines = [line.strip().replace(' ', '').replace('«', '<') for line in raw_text.split('\n')]
-    
-    # Find the start of the 2-line MRZ block
-    mrz_line1_index = -1
-    for i, line in enumerate(text_lines):
-        # CRUCIAL: Find MRZ Line 1. It can start with P< (standard)
-        # or <[3_LETTER_CODE] (if 'P' is hidden/not scanned).
-        is_p_line = line.startswith('P<')
-        is_alt_line = re.match(r'^<[A-Z]{3}', line)
-        
-        # Check if it looks like Line 1 (has '<<' for names) and is long enough
-        if (is_p_line or is_alt_line) and '<<' in line and len(line) >= 44:
-            # Check if the *next* line also looks like an MRZ line (Line 2)
-            if i + 1 < len(text_lines) and len(text_lines[i+1].replace('<','')) > 10 and len(text_lines[i+1]) >= 44:
-                mrz_line1_index = i
-                break
 
-    if mrz_line1_index != -1 and mrz_line1_index + 1 < len(text_lines):
-        # --- We found the MRZ block, now parse it exclusively ---
-        line1 = text_lines[mrz_line1_index].ljust(44, '<')
-        line2_raw = text_lines[mrz_line1_index + 1]
-        line2 = re.sub(r'[^A-Z0-9<]', '', line2_raw).ljust(44, '<') # Clean line 2
+    # Clean the string: remove spaces and fix common OCR errors
+    s = line_to_extract.replace(' ', '').replace('«', '<')
 
-        # --- Parse Line 2 ---
-        passport_num_raw = line2[0:9]
-        
-        # CRUCIAL: Correct '11' to 'II' in DD11DDDDD pattern
-        match = re.match(r'(\d{2})11(\d{5})', passport_num_raw)
-        if match:
-            passport_num = f"{match.group(1)}II{match.group(2)}"
-        else:
-            passport_num = passport_num_raw.replace('<', '').strip()
-        
-        data["passport_number"] = passport_num or None
-        data["nationality"] = line2[10:13].replace('<', '').strip() or None
-        data["birth_date"] = _parse_date_from_mrz(line2[13:19])
-        data["expiration_date"] = _parse_date_from_mrz(line2[21:27])
-
-        # --- Parse Line 1 ---
-        name_part = line1[5:44]
-        parts = name_part.split('<<')
-        if len(parts) >= 1:
-            data["last_name"] = parts[0].replace('<', ' ').strip() or None
-        if len(parts) >= 2:
-            data["first_name"] = parts[1].replace('<', ' ').strip() or None
+    # This regex finds the stable "Line 2" block. This is the most
+    # reliable anchor in a string with missing '<' characters.
+    line2_pattern = re.compile(
+        r'([A-Z0-9<]{9})'   # Group 1: Passport Number
+        r'([0-9<]{1})'      # Group 2: Passport Check Digit
+        r'(FRA)'            # Group 3: Nationality
+        r'([0-9<]{6})'      # Group 4: Date of Birth
+        r'([0-9<]{1})'      # Group 5: DOB Check Digit
+        r'([MF<]{1})'       # Group 6: Sex
+        r'([0-9<]{6})'      # Group 7: Expiration Date
+        r'([0-9<]{1})'      # Group 8: Expiry Check Digit
+    )
     
-    # --- All other parsing logic is removed to meet MRZ-exclusive requirement ---
+    line2_match = line2_pattern.search(s)
 
-    # Check for required fields *from the MRZ*.
-    # delivery_date is NOT in the MRZ, so it is not checked here.
-    required_fields = ["last_name", "first_name", "birth_date", "passport_number", "expiration_date", "nationality"]
-    missing_fields = [field for field in required_fields if not data.get(field)]
-    
-    if not data["passport_number"] and not data["last_name"]:
-        raise ValueError("Could not find or parse MRZ lines.")
+    if not line2_match:
+        # If the pattern isn't found, we can't parse the string.
+        raise ValueError("Could not parse MRZ. Stable pattern (Passport/FRA/Dates) not found.")
+
+    # --- Extract data from the found pattern (UNCHANGED) ---
+    passport_raw = line2_match.group(1).replace('<', '')
+    data["nationality"] = line2_match.group(3)
+    data["birth_date"] = _parse_date_from_mrz(line2_match.group(4))
+    data["expiration_date"] = _parse_date_from_mrz(line2_match.group(7))
+
+    # --- CRUCIAL: This handles the "1" vs "I" problem (UNCHANGED) ---
+    if len(passport_raw) == 9:
+        p_digits1 = passport_raw[0:2] # First 2 digits
+        p_letters = passport_raw[2:4] # The 2 letters
+        p_digits2 = passport_raw[4:9] # Last 5 digits
         
-    if missing_fields:
-        missing_list = ', '.join([field.replace('_', ' ').title() for field in missing_fields])
-        raise ValueError(f"Could not extract required MRZ fields: {missing_list}.")
+        # This replaces any '1' with 'I' ONLY in the letter part.
+        p_letters_fixed = p_letters.replace('1', 'I')
+        
+        # Reconstruct the number
+        data["passport_number"] = p_digits1 + p_letters_fixed + p_digits2
+    else:
+        # Fallback for malformed numbers (still replaces all '1's)
+        data["passport_number"] = passport_raw.replace('1', 'I')
+
+    # --- Parse the name from the part of the string BEFORE the match ---
+    # *********** THIS IS THE FIX ***********
+    line1_part = s[:line2_match.start()]
+    
+    # Find the 'FRA' country code in the first line. The name starts right after it.
+    # This robustly handles 'P<FRA...', '<FRA...', or even just 'FRA...'
+    code_index = line1_part.find('FRA')
+    
+    if code_index != -1:
+        # Get everything after 'FRA'
+        name_part = line1_part[code_index + 3:]
+    else:
+        # Fallback if 'FRA' isn't in the first part (unlikely)
+        # We can't safely parse, so we'll just have an empty name
+        name_part = "" 
+
+    # Split name into last and first
+    if name_part:
+        name_parts = name_part.rstrip('<').split('<<')
+        
+        # This handles multiple last names like 'LE<SARAZIN'
+        data["last_name"] = name_parts[0].replace('<', ' ').strip()
+        
+        if len(name_parts) > 1:
+            # This joins all given names AND any initials (like R or C)
+            data["first_name"] = ' '.join(name_parts[1:]).replace('<', ' ').strip()
     
     return data
+
 
 
 def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Dict]:
@@ -123,7 +148,7 @@ def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Di
         try:
             image_pages = convert_from_bytes(file_content, dpi=300)
         except Exception as e:
-            raise RuntimeError("Could not process PDF. Ensure 'poppler' is installed and in PATH.") from e
+            raise RuntimeError("Could not process PDF. Ensure 'poppler' is in PATH.") from e
     elif "image" in content_type:
         image_pages.append(file_content)
     else:
@@ -142,7 +167,7 @@ def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Di
             full_text = response.full_text_annotation.text
             if not full_text: raise ValueError("No text detected on page.")
 
-            # This is now the ONLY part that prints to the terminal
+            # This is your logic for finding and concatenating MRZ lines
             mrz_lines_found = [line.strip() for line in full_text.split('\n') if '<' in line]
             line_to_extract = ""
 
@@ -150,19 +175,28 @@ def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Di
                 print(f"PAGE {page_num}:")
                 for line in mrz_lines_found:
                     new_line = ""
-                    for i in range(len(line)):
-                        if line[i] == " " and line[i-1].isupper() and line[i+1].isupper():
+                    for j in range(len(line)): # Using j to avoid conflict with outer 'i'
+                        if line[j] == " " and j > 0 and j < len(line) - 1 and line[j-1].isupper() and line[j+1].isupper():
                             new_line += "<"
-                        elif line[i] == " ":
+                        elif line[j] == " ":
                             continue
                         else:
-                            new_line += line[i]
+                            new_line += line[j]
                     line_to_extract += new_line   
 
                 print(line_to_extract)
                 print()
+            
+            # --- START OF CHANGED BLOCK ---
+            
+            # Check if your logic produced a string to parse
+            if not line_to_extract:
+                raise ValueError("No MRZ lines were found or concatenated.")
 
-            parsed_data = _parse_passport_text(full_text)
+            # Call the *new* parser with the concatenated string
+            parsed_data = _parse_passport_text(line_to_extract)
+            
+            # --- END OF CHANGED BLOCK ---
             
             # Calculate confidence score
             total_confidence, symbol_count = 0, 0
@@ -182,4 +216,3 @@ def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Di
             
     return all_results
 
-# --------------- END OF FILE: ocr_service.py ---------------
