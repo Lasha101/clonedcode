@@ -108,7 +108,7 @@ def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
         data["passport_number"] = p_digits1 + p_letters_fixed + p_digits2
     else:
         # Fallback for malformed numbers (still replaces all '1's)
-        data["passport_number"] = passport_raw.replace('1', 'I')
+        data["passport_number"] = "---PROBLEME---"
 
     # --- Parse the name from the part of the string BEFORE the match ---
     # *********** THIS IS THE FIX ***********
