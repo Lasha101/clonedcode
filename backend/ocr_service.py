@@ -1,6 +1,7 @@
 import os
 import re
 import io
+import asyncio
 from datetime import datetime
 from typing import Dict, Optional, List
 import logging
@@ -24,14 +25,6 @@ except Exception as e:
     logger.error(f"🔴 [GCP] FAILED to initialize Google Cloud clients: {e}")
     raise e
 
-
-
-
-
-import re
-import json
-from typing import Dict, Optional
-from datetime import datetime
 
 # --- Helper function for date parsing (UNCHANGED) ---
 def _parse_date_from_mrz(date_str: str) -> Optional[str]:
@@ -108,7 +101,7 @@ def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
         data["passport_number"] = p_digits1 + p_letters_fixed + p_digits2
     else:
         # Fallback for malformed numbers (still replaces all '1's)
-        data["passport_number"] = "---PROBLEME---"
+        data["passport_number"] = "---!!!---"
 
     # --- Parse the name from the part of the string BEFORE the match ---
     # *********** THIS IS THE FIX ***********
@@ -141,64 +134,79 @@ def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
 
 
 
-def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Dict]:
+async def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Dict]:
     if not vision_client: raise RuntimeError("Google Vision client is not initialized.")
     all_results = []; image_pages = []
+
     if "pdf" in content_type:
         try:
-            image_pages = convert_from_bytes(file_content, dpi=300)
+            # 3. Run the slow, blocking code in a thread
+            image_pages = await asyncio.to_thread(
+                convert_from_bytes, file_content, dpi=300
+            )
         except Exception as e:
             raise RuntimeError("Could not process PDF. Ensure 'poppler' is in PATH.") from e
+            
+    # --- THIS IS THE MISSING PART ---
     elif "image" in content_type:
-        image_pages.append(file_content)
+        image_pages.append(file_content) # Add the raw image bytes to the list
+    # --- END OF FIX ---
+    
     else:
+        # You should also handle unsupported types
         raise HTTPException(status_code=400, detail="Unsupported file type.")
+
 
     for i, page_image in enumerate(image_pages):
         page_num = i + 1
         try:
             image_bytes = None
             if "pdf" in content_type:
-                with io.BytesIO() as output: page_image.save(output, format="PNG"); image_bytes = output.getvalue()
-            else: image_bytes = page_image
+                # page_image is a PIL Image, convert it to bytes
+                with io.BytesIO() as output:
+                    page_image.save(output, format="PNG")
+                    image_bytes = output.getvalue()
+            else:
+                # page_image is already bytes (from the elif block)
+                image_bytes = page_image 
+            
             image = vision.Image(content=image_bytes)
-            response = vision_client.document_text_detection(image=image)
+            
+            # 4. Run the slow, blocking network call in a thread
+            response = await asyncio.to_thread(
+                vision_client.document_text_detection, image=image
+            )
+            
             if response.error.message: raise Exception(f"Google Vision API Error: {response.error.message}")
+            
+            # ... (rest of your parsing logic remains the same) ...
+            
+            # Find and concatenate MRZ lines
             full_text = response.full_text_annotation.text
             if not full_text: raise ValueError("No text detected on page.")
 
-            # This is your logic for finding and concatenating MRZ lines
             mrz_lines_found = [line.strip() for line in full_text.split('\n') if '<' in line]
             line_to_extract = ""
 
             if mrz_lines_found:
-                print(f"PAGE {page_num}:")
+                # ... (This is your original logic from ocr_service.py)
                 for line in mrz_lines_found:
                     new_line = ""
-                    for j in range(len(line)): # Using j to avoid conflict with outer 'i'
+                    for j in range(len(line)):
                         if line[j] == " " and j > 0 and j < len(line) - 1 and line[j-1].isupper() and line[j+1].isupper():
                             new_line += "<"
                         elif line[j] == " ":
                             continue
                         else:
                             new_line += line[j]
-                    line_to_extract += new_line   
-
-                print(line_to_extract)
-                print()
+                    line_to_extract += new_line
             
-            # --- START OF CHANGED BLOCK ---
-            
-            # Check if your logic produced a string to parse
             if not line_to_extract:
                 raise ValueError("No MRZ lines were found or concatenated.")
 
-            # Call the *new* parser with the concatenated string
             parsed_data = _parse_passport_text(line_to_extract)
             
-            # --- END OF CHANGED BLOCK ---
-            
-            # Calculate confidence score
+            # Calculate confidence
             total_confidence, symbol_count = 0, 0
             for page in response.full_text_annotation.pages:
                 for block in page.blocks:
@@ -210,9 +218,9 @@ def extract_data_page_by_page(file_content: bytes, content_type: str) -> List[Di
             parsed_data['confidence_score'] = round(average_confidence, 4)
             
             all_results.append({"page_number": page_num, "data": parsed_data})
+            # --- End of parsing logic ---
             
         except Exception as e:
             all_results.append({"page_number": page_num, "error": str(e)})
-            
-    return all_results
 
+    return all_results

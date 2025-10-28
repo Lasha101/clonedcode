@@ -170,7 +170,7 @@ async def upload_and_extract_passport(
 
     try:
         # Call the new page-by-page service function
-        extraction_results = ocr_service.extract_data_page_by_page(
+        extraction_results = await ocr_service.extract_data_page_by_page(
             file_content=file_content,
             content_type=file.content_type
         )
