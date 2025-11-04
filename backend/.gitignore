@@ -5,6 +5,8 @@ alembic/
 venv/
 *.pyc
 google-credentials.json
+google-credentials1.json
+verify_data.py
 travel_app.db
 alembic.ini
 .env
