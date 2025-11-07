@@ -21,7 +21,7 @@ class PassportBase(BaseModel):
     last_name: str
     birth_date: date
     expiration_date: date
-    delivery_date: Optional[date] = None # <-- This was the change from last time
+    delivery_date: Optional[date] = None
     nationality: str
     passport_number: str
     confidence_score: Optional[float] = None
@@ -83,17 +83,28 @@ class InvitationUpdate(BaseModel):
     expires_at: Optional[datetime] = None
     is_used: Optional[bool] = None
 
-class OcrFailure(BaseModel):
+# --- NEW/UPDATED OCR SCHEMAS ---
+
+class OcrJobFailure(BaseModel):
     page_number: int
     detail: str
 
-class OcrSuccess(BaseModel):
+class OcrJobSuccess(BaseModel):
     page_number: int
-    data: Passport
+    data: Passport # <-- Changed from Any to Passport
 
-class OcrUploadResponse(BaseModel):
-    successes: List[OcrSuccess]
-    failures: List[OcrFailure]
+class OcrJob(BaseModel):
+    id: str
+    user_id: int
+    file_name: str
+    status: str # e.g., "processing", "complete", "failed"
+    created_at: datetime
+    finished_at: Optional[datetime] = None
+    successes: List[OcrJobSuccess] = []
+    failures: List[OcrJobFailure] = []
+    
+    class Config:
+        from_attributes = True # for in-memory dict
 
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
