@@ -59,6 +59,7 @@ async def run_ocr_extraction_task(
     job = OCR_JOBS.get(job_id)
     if not job:
         logger.error(f"Job {job_id} not found in task runner.")
+        db.close() # Close session
         return
 
     try:
@@ -101,10 +102,8 @@ async def run_ocr_extraction_task(
                     db=db, passport=passport_create_schema, user_id=user_id
                 )
                 
-                # --- THIS IS THE FIX ---
+                # --- FIX from last time ---
                 # Convert the live SQLAlchemy model to a Pydantic schema *while the session is active*.
-                # Pydantic's `model_validate` (with from_attributes=True) will correctly
-                # access lazy-loaded attributes (like 'voyages') before the session closes.
                 created_passport_schema = schemas.Passport.model_validate(created_passport_model)
                 
                 # Add the *Pydantic schema* (which is just data) to the success list.
@@ -343,7 +342,36 @@ async def get_ocr_job(
         raise HTTPException(status_code=403, detail="Not authorized to view this job.")
     return job
 
-# --- END OF NEW OCR JOB ROUTES ---
+# --- THIS IS THE NEW DELETE ROUTE ---
+@app.delete("/ocr/jobs/{job_id}", response_model=schemas.OcrJob)
+async def delete_ocr_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """
+    Deletes a job notification from the in-memory store.
+    """
+    global OCR_JOBS
+    job = OCR_JOBS.get(job_id)
+    
+    # Check if job exists
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    # Check if the user is authorized to delete this job
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this job.")
+    
+    # Pop the job from the dictionary
+    deleted_job = OCR_JOBS.pop(job_id, None)
+    
+    if deleted_job is None:
+        # This might happen in a race condition, though unlikely
+        raise HTTPException(status_code=404, detail="Job not found during deletion.")
+        
+    return deleted_job
+# --- END OF NEW DELETE ROUTE ---
 
 
 @app.get("/export/data")
