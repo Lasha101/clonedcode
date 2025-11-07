@@ -62,6 +62,9 @@ const GlobalStyles = () => (
         .table thead th { background-color: #f8f9fa; font-weight: 600; }
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr:hover { background-color: #f1f3f5; }
+        /* Style for selected row */
+        .table tbody tr.selected-row { background-color: rgba(42, 111, 219, 0.1); }
+        .table th.checkbox-cell, .table td.checkbox-cell { width: 1%; text-align: center; }
         .filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
         .capitalize { text-transform: capitalize; }
         .text-center { text-align: center; }
@@ -623,6 +626,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [filters, setFilters] = useState({});
     const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
+    
+    // --- NEW STATE FOR MULTI-DELETE ---
+    const [selectedIds, setSelectedIds] = useState(new Set());
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -662,6 +668,8 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             if (response.ok) setItems(await response.json());
             else console.error("Échec de la récupération des données pour", endpoint);
         } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
+        // Clear selection on new data fetch
+        setSelectedIds(new Set());
     }, [endpoint, token, filters]);
     
     useEffect(() => { fetchData(); }, [fetchData]);
@@ -677,8 +685,16 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setEditingItem(null); 
         setIsCreating(false); 
         setShowOcrUploader(false); 
+        setSelectedIds(new Set()); // Clear selection
         fetchData(); 
     };
+
+    const handleCancel = () => {
+        setEditingItem(null);
+        setIsCreating(false);
+        setShowOcrUploader(false);
+        setSelectedIds(new Set()); // Clear selection
+    }
 
     const startCreating = () => {
         let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
@@ -688,6 +704,53 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setIsCreating(true);
     };
 
+    // --- NEW HANDLERS FOR MULTI-DELETE ---
+    const handleToggleSelect = (id) => {
+        setSelectedIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const handleToggleSelectAll = () => {
+        if (selectedIds.size === items.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(items.map(i => i.id)));
+        }
+    };
+
+    const handleMultiDelete = async () => {
+        if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedIds.size} passeports ?`)) {
+            const payload = { passport_ids: Array.from(selectedIds) };
+            try {
+                const response = await fetch(`${API_URL}/passports/delete-multiple`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    fetchData(); // Refreshes data and clears selection
+                } else {
+                    const errorData = await response.json();
+                    alert(`Échec de la suppression multiple: ${errorData.detail}`);
+                }
+            } catch (err) {
+                alert(`Une erreur est survenue: ${err.message}`);
+            }
+        }
+    };
+    // --- END OF NEW HANDLERS ---
+
+
     if (showOcrUploader) {
         return <OcrUploader 
             token={token} 
@@ -696,7 +759,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         />
     }
 
-    if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={() => setEditingItem(null)} fields={fields} endpoint={endpoint} token={token} />;
+    if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={handleCancel} fields={fields} endpoint={endpoint} token={token} />;
 
     const displayFields = { ...fields };
     if (endpoint === 'admin/users') delete displayFields.password;
@@ -709,7 +772,13 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    {/* --- NEW MULTI-DELETE BUTTON --- */}
+                    {endpoint === 'passports' && selectedIds.size > 0 && (
+                        <button onClick={handleMultiDelete} className="btn btn-danger">
+                            Supprimer la sélection ({selectedIds.size})
+                        </button>
+                    )}
                     {endpoint === 'passports' && (
                         <button onClick={() => setShowOcrUploader(true)} className="btn btn-primary" style={{ backgroundColor: 'var(--success-color)' }}>
                             + Ajouter par Téléchargement
@@ -748,6 +817,18 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                 <table className="table">
                     <thead>
                         <tr>
+                            {/* --- NEW CHECKBOX HEADER --- */}
+                            {endpoint === 'passports' && (
+                                <th className="checkbox-cell">
+                                    <input
+                                        type="checkbox"
+                                        className="form-checkbox"
+                                        onChange={handleToggleSelectAll}
+                                        checked={items.length > 0 && selectedIds.size === items.length}
+                                        aria-label="Sélectionner tout"
+                                    />
+                                </th>
+                            )}
                             {Object.keys(displayFields).map(field => (
                                 <th key={field}>{columnTranslations[field] || field.replace(/_/g, ' ')}</th>
                             ))}
@@ -756,7 +837,19 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     </thead>
                     <tbody>
                         {items.map(item => (
-                            <tr key={item.id}>
+                            <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
+                                {/* --- NEW CHECKBOX CELL --- */}
+                                {endpoint === 'passports' && (
+                                    <td className="checkbox-cell">
+                                        <input
+                                            type="checkbox"
+                                            className="form-checkbox"
+                                            onChange={() => handleToggleSelect(item.id)}
+                                            checked={selectedIds.has(item.id)}
+                                            aria-label={`Sélectionner ${item.first_name} ${item.last_name}`}
+                                        />
+                                    </td>
+                                )}
                                 {Object.keys(displayFields).map(field => {
                                     let cellValue = item[field];
                                     if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(2)}%`; }

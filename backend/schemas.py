@@ -106,6 +106,10 @@ class OcrJob(BaseModel):
     class Config:
         from_attributes = True # for in-memory dict
 
+# --- NEW SCHEMA FOR MULTI-DELETE ---
+class PassportDeleteMultiple(BaseModel):
+    passport_ids: List[int]
+
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
 

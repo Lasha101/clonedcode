@@ -1,4 +1,4 @@
-
+# --------------- START OF FILE: crud.py ---------------
 
 # /crud.py
 
@@ -318,3 +318,34 @@ def get_destinations_by_user_id(db: Session, user_id: int) -> List[str]:
     query = db.query(models.Voyage.destination).filter(models.Voyage.user_id == user_id).distinct()
     destinations = [item[0] for item in query.all()]
     return destinations
+
+# --- NEW FUNCTION FOR MULTI-DELETE ---
+def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int, role: str) -> int:
+    """
+    Deletes multiple passports.
+    If the user is not an admin, it only deletes passports they own.
+    """
+    query = db.query(models.Passport).filter(models.Passport.id.in_(passport_ids))
+    
+    # Security check: Non-admins can only delete their own passports
+    if role != "admin":
+        query = query.filter(models.Passport.owner_id == user_id)
+    
+    # Get the actual list of passports that will be deleted
+    passports_to_delete = query.all()
+    ids_to_delete = [p.id for p in passports_to_delete]
+    
+    if not ids_to_delete:
+        return 0
+        
+    # Perform the bulk delete on the verified IDs
+    deleted_count = db.query(models.Passport).filter(
+        models.Passport.id.in_(ids_to_delete)
+    ).delete(synchronize_session=False)
+    
+    db.commit()
+    
+    return deleted_count
+# --- END OF NEW FUNCTION ---
+
+# --------------- END OF FILE: crud.py ---------------

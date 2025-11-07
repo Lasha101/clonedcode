@@ -437,6 +437,26 @@ def delete_passport(passport_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=403, detail="Non autorisé à supprimer ce passeport")
     return crud.delete_passport(db=db, passport_id=passport_id)
 
+# --- NEW: MULTI-DELETE ENDPOINT ---
+@app.post("/passports/delete-multiple", response_model=dict)
+def delete_multiple_passports(
+    payload: schemas.PassportDeleteMultiple,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    if not payload.passport_ids:
+        return {"deleted_count": 0}
+    
+    deleted_count = crud.delete_multiple_passports(
+        db=db,
+        passport_ids=payload.passport_ids,
+        user_id=current_user.id,
+        role=current_user.role
+    )
+    return {"deleted_count": deleted_count}
+# --- END OF NEW MULTI-DELETE ENDPOINT ---
+
+
 # --- Voyage and Destination Routes ---
 @app.post("/voyages/", response_model=schemas.Voyage)
 def create_voyage(voyage: schemas.VoyageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
