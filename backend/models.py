@@ -1,5 +1,3 @@
-# --------------- START OF FILE: models.py ---------------
-
 # /models.py
 from sqlalchemy import Boolean, Column, Integer, Float, String, Date, ForeignKey, Table, DateTime
 from sqlalchemy.orm import relationship
@@ -20,6 +18,11 @@ class User(Base):
     user_name = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user")
+    
+    # --- NEW FIELD ---
+    uploaded_pages_count = Column(Integer, default=0, nullable=False)
+    # --- END OF NEW FIELD ---
+
     passports = relationship("Passport", back_populates="owner", cascade="all, delete-orphan")
     voyages = relationship("Voyage", back_populates="user", cascade="all, delete-orphan")
 
@@ -53,5 +56,3 @@ class Invitation(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
-
-# --------------- END OF FILE: models.py ---------------

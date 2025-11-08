@@ -1,5 +1,3 @@
-// --------------- START OF FILE: ../frontend/src/App.jsx ---------------
-
 import React, { useState, useEffect, useCallback } from 'react';
 
 const API_URL = 'http://127.0.0.1:8000';
@@ -115,7 +113,8 @@ const columnTranslations = {
     token: 'Jeton',
     expires_at: 'Expire Le',
     is_used: 'Utilisé',
-    actions: 'Actions'
+    actions: 'Actions',
+    uploaded_pages_count: 'Pages Traitées' // <-- NEW TRANSLATION
 };
 
 // --- HELPER COMPONENTS & ICONS ---
@@ -302,12 +301,25 @@ function Dashboard({ user, token, fetchUser }) {
             
         const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', delivery_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
         
+        // --- UPDATED USER FIELDS ---
+        const userFields = { 
+            first_name: 'text', 
+            last_name: 'text', 
+            email: 'email', 
+            phone_number: 'text', 
+            user_name: 'text', 
+            password: 'password', 
+            role: 'text', 
+            uploaded_pages_count: 'number' // <-- NEW FIELD
+        };
+        // --- END OF UPDATE ---
+
         switch (activeTab) {
             case 'account': return <AccountEditor user={user} token={token} fetchUser={fetchUser} />;
             case 'passports': return <CrudManager title="Gérer les Passeports" endpoint="passports" token={token} user={user} fields={passportFields} filterConfig={passportFilterConfig} />;
             case 'voyages': return <CrudManager title="Gérer les Voyages" endpoint="voyages" token={token} user={user} fields={{ destination: 'text' }} filterConfig={voyageFilterConfig} />;
             case 'tools_export': return <ToolsAndExportPanel token={token} user={user} adminUsers={filterableUsers} userDestinations={userSpecificDestinations} />;
-            case 'users': return user.role === 'admin' ? <CrudManager title="Gérer les Utilisateurs" endpoint="admin/users" token={token} user={user} fields={{ first_name: 'text', last_name: 'text', email: 'email', phone_number: 'text', user_name: 'text', password: 'password', role: 'text' }} /> : null;
+            case 'users': return user.role === 'admin' ? <CrudManager title="Gérer les Utilisateurs" endpoint="admin/users" token={token} user={user} fields={userFields} /> : null;
             case 'invitations': return user.role === 'admin' ? <CrudManager title="Gérer les Invitations" endpoint="admin/invitations" token={token} user={user} fields={{ email: 'email', token: 'text', expires_at: 'datetime-local', is_used: 'checkbox' }} /> : null;
             default: return null;
         }
@@ -698,7 +710,10 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
     const startCreating = () => {
         let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
-        if (endpoint === 'admin/users') newItem.role = 'user';
+        if (endpoint === 'admin/users') {
+            newItem.role = 'user';
+            newItem.uploaded_pages_count = 0; // Default for new user
+        }
         if (endpoint === 'admin/invitations') newItem = { email: '' };
         setEditingItem(newItem);
         setIsCreating(true);
@@ -857,7 +872,13 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                                 })}
                                 <td>
                                     <button onClick={() => setEditingItem(item)} className="btn" style={{ backgroundColor: 'var(--warning-color)', color: 'black', marginRight: '0.5rem' }}>Modifier</button>
-                                    <button onClick={() => handleDelete(item.id)} className="btn btn-danger">Supprimer</button>
+                                    
+                                    {/* --- THIS IS THE CRUCIAL CHANGE --- */}
+                                    {/* The individual delete button is now conditional */}
+                                    {endpoint !== 'passports' && (
+                                        <button onClick={() => handleDelete(item.id)} className="btn btn-danger">Supprimer</button>
+                                    )}
+                                    {/* --- END OF CHANGE --- */}
                                 </td>
                             </tr>
                         ))}
@@ -902,6 +923,9 @@ function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token 
         if (body.confidence_score === '') { body.confidence_score = null; }
         if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
         if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
+        if (endpoint === 'admin/users') {
+            body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
+        }
         const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
         if (response.ok) { onSave(); } else { 
             const errorData = await response.json(); 
@@ -911,7 +935,7 @@ function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token 
     const formFields = { ...fields };
     if (formFields.confidence_score) { delete formFields.confidence_score; }
     if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
-    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
+    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
 }
 
 function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
@@ -1057,5 +1081,3 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
-
-// --------------- END OF FILE: ../frontend/src/App.jsx ---------------

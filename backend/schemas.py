@@ -1,5 +1,3 @@
-# --------------- START OF FILE: schemas.py ---------------
-
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import date, datetime
@@ -52,10 +50,16 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
     password: Optional[str] = None
+    # --- NEW FIELD ---
+    uploaded_pages_count: Optional[int] = None
+    # --- END OF NEW FIELD ---
 
 class User(UserBase):
     id: int
     role: str
+    # --- NEW FIELD ---
+    uploaded_pages_count: int
+    # --- END OF NEW FIELD ---
     passports: List["Passport"] = []
     voyages: List[Voyage] = []
     class Config:
@@ -112,5 +116,3 @@ class PassportDeleteMultiple(BaseModel):
 
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
-
-# --------------- END OF FILE: schemas.py ---------------

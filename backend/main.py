@@ -1,5 +1,3 @@
-# --------------- START OF FILE: main.py ---------------
-
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
@@ -121,6 +119,25 @@ async def run_ocr_extraction_task(
                 detail = getattr(e, 'detail', f"A database error occurred: {str(e)}")
                 failures.append({"page_number": page_number, "detail": detail})
     
+    # --- NEW: Increment User's Page Count ---
+    # We do this after processing all pages, based on the *total number of pages returned by the OCR service*.
+    page_count = len(extraction_results)
+    if page_count > 0:
+        try:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                if user.uploaded_pages_count is None: # Handle null values just in case
+                    user.uploaded_pages_count = 0
+                user.uploaded_pages_count += page_count
+                db.commit()
+                logger.info(f"Incremented page count for user {user_id} by {page_count}. New total: {user.uploaded_pages_count}")
+            else:
+                logger.warning(f"Could not find user {user_id} to increment page count.")
+        except Exception as e:
+            logger.error(f"Failed to increment page count for user {user_id}: {e}", exc_info=True)
+            db.rollback() # Rollback this specific error, but let the task complete
+    # --- END OF NEW LOGIC ---
+
     # 3. Update the job in our in-memory DB
     job["status"] = "complete"
     job["finished_at"] = datetime.now()
@@ -212,6 +229,9 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 @app.put("/users/me", response_model=schemas.User)
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
+    # User cannot update their own page count
+    if user_update.uploaded_pages_count is not None:
+        user_update.uploaded_pages_count = None
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
 # --- Admin User Management Routes ---
@@ -235,6 +255,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 
 @app.put("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
 def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+    # Admin can update page count
     db_user = crud.update_user(db=db, user_id=user_id, user_update=user_update)
     if db_user is None:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
@@ -532,5 +553,3 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 @app.get("/admin/filterable-users", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
-
-# --------------- END OF FILE: main.py ---------------
