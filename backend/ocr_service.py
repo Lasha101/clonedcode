@@ -1,6 +1,5 @@
 import os
 import re
-import io
 from datetime import datetime
 from typing import Dict, Optional, List
 import logging
