@@ -434,11 +434,17 @@ def export_data(
 @app.get("/passports/", response_model=list[schemas.Passport])
 def read_passports(
     db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user),
-    user_filter: Optional[str] = None, voyage_filter: Optional[str] = None
+    user_filter: Optional[str] = Query(None), 
+    voyage_filter: Optional[str] = Query(None),
+    destination_filter: Optional[str] = Query(None) # <-- NEW FILTER
 ):
     if current_user.role == "admin":
         return crud.get_passports(db=db, user_filter=user_filter, voyage_filter=voyage_filter)
-    return crud.get_passports_by_user(db=db, user_id=current_user.id)
+    
+    # Non-admin users now get filtered results
+    return crud.get_passports_by_user(
+        db=db, user_id=current_user.id, destination=destination_filter
+    )
 
 @app.put("/passports/{passport_id}", response_model=schemas.Passport)
 def update_passport(passport_id: int, passport_update: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):

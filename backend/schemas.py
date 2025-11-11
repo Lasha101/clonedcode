@@ -29,7 +29,7 @@ class PassportCreate(PassportBase):
 
 class Passport(PassportBase):
     id: int
-    owner_id: int
+    owner_id: Optional[int] = None  # <-- THIS IS THE FIX
     voyages: List[Voyage] = []
     class Config:
         from_attributes = True
@@ -116,3 +116,4 @@ class PassportDeleteMultiple(BaseModel):
 
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
+

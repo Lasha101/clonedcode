@@ -291,9 +291,19 @@ function Dashboard({ user, token, fetchUser }) {
     }, [fetchAdminData, fetchUserDestinations]);
 
     const renderTabContent = () => {
+        // --- THIS IS THE KEY CHANGE ---
+        // Admins get a user filter.
+        // Regular users get a destination filter.
         const passportFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
-            : null;
+            : [{ 
+                name: 'destination_filter', // This now matches the new param in main.py
+                placeholder: 'Filtrer par Destination', 
+                options: userSpecificDestinations.map(d => ({ destination: d })), // Use the fetched list
+                getOptionValue: (o) => o.destination,
+                getOptionLabel: (o) => o.destination
+              }];
+        // --- END OF KEY CHANGE ---
 
         const voyageFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
@@ -1097,3 +1107,4 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
+

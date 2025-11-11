@@ -1,5 +1,3 @@
-# --------------- START OF FILE: crud.py ---------------
-
 # /crud.py
 
 from sqlalchemy.orm import Session, joinedload, outerjoin
@@ -97,8 +95,15 @@ def get_passports(db: Session, skip: int = 0, limit: int = 100, user_filter: Opt
             query = query.filter(models.Voyage.destination.ilike(f"%{voyage_filter}%"))
     return query.offset(skip).limit(limit).all()
 
-def get_passports_by_user(db: Session, user_id: int):
-    return db.query(models.Passport).filter(models.Passport.owner_id == user_id).all()
+def get_passports_by_user(db: Session, user_id: int, destination: Optional[str] = None):
+    query = db.query(models.Passport).filter(models.Passport.owner_id == user_id)
+    
+    if destination:
+        query = query.join(models.Passport.voyages).filter(
+            models.Voyage.destination.ilike(f"%{destination}%")
+        )
+        
+    return query.all()
 
 def create_user_passport(db: Session, passport: schemas.PassportCreate, user_id: int):
     if passport.destination:
@@ -319,33 +324,82 @@ def get_destinations_by_user_id(db: Session, user_id: int) -> List[str]:
     destinations = [item[0] for item in query.all()]
     return destinations
 
-# --- NEW FUNCTION FOR MULTI-DELETE ---
+# --- MODIFIED FUNCTION FOR MULTI-DELETE ---
 def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int, role: str) -> int:
     """
-    Deletes multiple passports.
-    If the user is not an admin, it only deletes passports they own.
+    Deletes or disassociates multiple passports based on sharing.
+    - If a user (non-admin) deletes, they can only "delete" passports they OWN.
+    - If an admin deletes, they can "delete" any passport.
+    - "Delete" logic:
+        1. Find all users related to the passport (as owner OR via a voyage).
+        2. If the *only* related user is the one deleting it -> HARD DELETE.
+        3. If *other* users are related -> PRESERVE, but disassociate from the deleter:
+            - If deleter is owner, set owner_id = None.
+            - Remove passport from all of deleter's voyages.
     """
+    
+    # 1. Get all passport objects the user is allowed to "delete".
     query = db.query(models.Passport).filter(models.Passport.id.in_(passport_ids))
     
-    # Security check: Non-admins can only delete their own passports
+    # Security Check: Non-admins can only "delete" passports they OWN.
     if role != "admin":
         query = query.filter(models.Passport.owner_id == user_id)
     
-    # Get the actual list of passports that will be deleted
-    passports_to_delete = query.all()
-    ids_to_delete = [p.id for p in passports_to_delete]
+    passports_to_process = query.all()
     
-    if not ids_to_delete:
+    if not passports_to_process:
         return 0
+
+    processed_count = 0
+    deleter_user_id = user_id
+
+    for passport in passports_to_process:
+        # 2. Find all unique users related to this passport.
         
-    # Perform the bulk delete on the verified IDs
-    deleted_count = db.query(models.Passport).filter(
-        models.Passport.id.in_(ids_to_delete)
-    ).delete(synchronize_session=False)
-    
+        # Get the owner
+        owner_id = passport.owner_id
+        
+        # Get all users related via voyages
+        voyage_user_ids = db.query(models.Voyage.user_id).join(
+            models.voyage_passport_association
+        ).filter(
+            models.voyage_passport_association.c.passport_id == passport.id
+        ).distinct().all()
+        
+        # Create a set of all related user IDs
+        related_user_ids = {u[0] for u in voyage_user_ids if u[0] is not None}
+        if owner_id:
+            related_user_ids.add(owner_id)
+
+        # 3. Check if any *other* users are related
+        other_related_users = related_user_ids - {deleter_user_id}
+
+        if len(other_related_users) == 0:
+            # Case A: Only the deleter is related. We can HARD DELETE.
+            db.delete(passport)
+        else:
+            # Case B: Other users are related. PRESERVE and DISASSOCIATE.
+            
+            # 1. If deleter is the owner, set owner to None (orphan it)
+            if passport.owner_id == deleter_user_id:
+                passport.owner_id = None
+            
+            # 2. Remove passport from all of the deleter's voyages
+            deleter_voyages = db.query(models.Voyage).filter(
+                models.Voyage.user_id == deleter_user_id
+            ).join(
+                models.voyage_passport_association
+            ).filter(
+                models.voyage_passport_association.c.passport_id == passport.id
+            ).all()
+            
+            for voyage in deleter_voyages:
+                voyage.passports.remove(passport)
+        
+        processed_count += 1
+
     db.commit()
     
-    return deleted_count
-# --- END OF NEW FUNCTION ---
+    return processed_count
+# --- END OF MODIFIED FUNCTION ---
 
-# --------------- END OF FILE: crud.py ---------------
