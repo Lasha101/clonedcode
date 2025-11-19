@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API_URL = 'http://127.0.0.1:8000';
+// const API_URL = 'http://127.0.0.1:8000';
+
+// Use the build-time environment variable if it exists,
+// otherwise fall back to '/api' for local development.
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // --- STYLES COMPONENT (Integrated) ---
 const GlobalStyles = () => (
@@ -1107,4 +1111,3 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
-

@@ -1,0 +1,26 @@
+# 4. docker-compose.yml (at the project root)
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: always
+    env_file: ./.env  # Load all variables from a .env file
+    expose:
+      - "8000" # Internal port only
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx.Dockerfile
+      args:
+        # This matches the setup in your App.jsx
+        VITE_API_URL: /api
+    restart: always
+    ports:
+      - "80:80" # Map EC2's public port 80 to this container's port 80
+    depends_on:
+      - backend

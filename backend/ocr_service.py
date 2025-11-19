@@ -1,14 +1,36 @@
 import os
+import json
+import logging
+
+# --- NEW: Load Google Credentials from Environment Variable ---
+# This code runs first. It checks for a 'GCP_CREDS_JSON' env var,
+# writes its content to a temporary file, and then sets the
+# 'GOOGLE_APPLICATION_CREDENTIALS' env var to point to that file.
+GCP_CREDS_JSON_CONTENT = os.getenv("GCP_CREDS_JSON")
+if GCP_CREDS_JSON_CONTENT:
+    try:
+        # Create a temporary file to hold the credentials
+        creds_path = "/tmp/gcp-creds.json"
+        with open(creds_path, "w") as f:
+            f.write(GCP_CREDS_JSON_CONTENT)
+        
+        # Set the environment variable that the Google client libraries expect
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+        
+        logging.info("Successfully loaded GCP credentials from env var.")
+    except Exception as e:
+        logging.error(f"Failed to write GCP credentials from env var: {e}")
+# --- END OF NEW CODE ---
+
 import re
+import io
 from datetime import datetime
 from typing import Dict, Optional, List
-import logging
-import json
 import asyncio
 import uuid # For unique filenames
 
 from google.cloud import vision
-from google.cloud import storage # <-- NEW: For GCS
+from google.cloud import storage # <-- For GCS
 from fastapi import HTTPException
 
 # --- Logger Setup ---
@@ -29,6 +51,7 @@ try:
 
     vision_client = vision.ImageAnnotatorClient()
     storage_client = storage.Client()
+    
     logger.info("✅ Google Cloud Vision and Storage clients initialized.")
 
 except Exception as e:
@@ -73,7 +96,7 @@ def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
     line2_pattern = re.compile(
         r'([A-Z0-9<]{9})'    # Group 1: Passport Number
         r'([0-9<]{1})'      # Group 2: Passport Check Digit
-        r'(FRA)'             # Group 3: Nationality
+        r'(FRA)'            # Group 3: Nationality
         r'([0-9<]{6})'      # Group 4: Date of Birth
         r'([0-9<]{1})'      # Group 5: DOB Check Digit
         r'([MF<]{1})'       # Group 6: Sex
@@ -147,13 +170,21 @@ async def _delete_gcs_prefix(bucket_name: str, prefix: str):
         bucket = storage_client.bucket(bucket_name)
         blobs_to_delete = list(bucket.list_blobs(prefix=prefix)) # Must list() before async loop
         loop = asyncio.get_event_loop()
-        delete_tasks = []
-        for blob in blobs_to_delete:
-            delete_tasks.append(
-                loop.run_in_executor(None, blob.delete)
-            )
-        if delete_tasks:
+        
+        # --- PERFORMANCE FIX FOR CONNECTION POOL ---
+        # Process deletes in chunks to avoid overwhelming the connection pool.
+        CHUNK_SIZE = 10 # This matches the default pool size
+        for i in range(0, len(blobs_to_delete), CHUNK_SIZE):
+            chunk = blobs_to_delete[i:i + CHUNK_SIZE]
+            delete_tasks = []
+            for blob in chunk:
+                delete_tasks.append(
+                    loop.run_in_executor(None, blob.delete)
+                )
             await asyncio.gather(*delete_tasks)
+            logger.info(f"Cleaned up GCS result chunk {i // CHUNK_SIZE + 1}...")
+        # --- END OF PERFORMANCE FIX ---
+            
         logger.info(f"Cleaned up GCS prefix: {bucket_name}/{prefix}")
     except Exception as e:
         logger.warning(f"Failed to cleanup GCS prefix: {bucket_name}/{prefix}. Error: {e}")
@@ -241,51 +272,33 @@ async def extract_data_page_by_page(file_content: bytes, content_type: str) -> L
             mime_type = 'application/pdf'
             feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
             
-            # --- FIX IS HERE ---
-            # 1. Create the GcsSource
             gcs_source = vision.GcsSource(uri=gcs_input_uri)
-            # 2. Create the InputConfig and put the GcsSource AND mime_type inside it
             input_config = vision.InputConfig(
                 gcs_source=gcs_source,
                 mime_type=mime_type
             )
             
-            # 3. Create the GcsDestination
             gcs_destination = vision.GcsDestination(uri=gcs_output_uri)
-            # 4. Create the OutputConfig and put the GcsDestination inside it
             output_config = vision.OutputConfig(
                 gcs_destination=gcs_destination,
                 batch_size=1 # Specify batch size for PDF
             )
 
-            # 5. Now, this request is valid because all its parameters are the correct type
             request = vision.AsyncAnnotateFileRequest(
                 features=[feature],
                 input_config=input_config,
                 output_config=output_config
             )
-            # --- END OF FIX ---
 
-            # Start the batch operation
-            # --- FIX IS HERE ---
-            # We must use a lambda to correctly pass the `requests` keyword argument
-            # to the client function when using run_in_executor.
             operation = await loop.run_in_executor(
                 None,
                 lambda: vision_client.async_batch_annotate_files(requests=[request])
             )
-            # --- END OF FIX ---
             
             logger.info(f"Waiting for GCS batch operation {operation.operation.name}...")
-            # Wait for the operation to complete. This polls Google.
-            # We set a timeout (e.g., 5 minutes)
-            # --- FIX IS HERE ---
-            # We must use a lambda to pass the `timeout` keyword argument
-            # to the operation.result() function.
             response = await loop.run_in_executor(
                 None, lambda: operation.result(timeout=300)
             )
-            # --- END OF FIX ---
             
             logger.info(f"Batch operation complete. Fetching results from {gcs_output_uri}")
 
@@ -299,23 +312,35 @@ async def extract_data_page_by_page(file_content: bytes, content_type: str) -> L
             if not json_blobs:
                 raise Exception("No result files found in GCS output bucket.")
 
-            for blob in json_blobs:
-                # Download JSON content
-                json_string = await loop.run_in_executor(None, blob.download_as_string)
-                response_json = json.loads(json_string)
+            # --- PERFORMANCE FIX FOR CONNECTION POOL ---
+            # Process downloads in chunks
+            CHUNK_SIZE = 10
+            for i in range(0, len(json_blobs), CHUNK_SIZE):
+                chunk = json_blobs[i:i + CHUNK_SIZE]
+                download_tasks = []
+                for blob in chunk:
+                    download_tasks.append(
+                        loop.run_in_executor(None, blob.download_as_string)
+                    )
                 
-                # Each JSON file can contain multiple page responses
-                for page_index, resp_dict in enumerate(response_json['responses']):
-                    # Convert the dict back to a standard Vision API response object
-                    # so our parser function can be reused
-                    page_response = vision.AnnotateImageResponse.from_json(json.dumps(resp_dict))
+                # Wait for this chunk of downloads to finish
+                downloaded_strings = await asyncio.gather(*download_tasks)
+                
+                # Now process the strings from this chunk
+                for json_string in downloaded_strings:
+                    response_json = json.loads(json_string)
                     
-                    page_num = page_response.context.page_number
-                    if page_num == 0: # Fallback if page number isn't in context
-                        page_num = page_index + 1
+                    # Each JSON file can contain multiple page responses
+                    for page_index, resp_dict in enumerate(response_json['responses']):
+                        page_response = vision.AnnotateImageResponse.from_json(json.dumps(resp_dict))
                         
-                    result = _parse_mrz_from_response(page_response, page_num)
-                    all_results.append(result)
+                        page_num = page_response.context.page_number
+                        if page_num == 0: # Fallback if page number isn't in context
+                            page_num = page_index + 1
+                            
+                        result = _parse_mrz_from_response(page_response, page_num)
+                        all_results.append(result)
+            # --- END OF PERFORMANCE FIX ---
 
             # 4. Clean up GCS output "folder"
             await _delete_gcs_prefix(GCS_OUTPUT_BUCKET, gcs_output_uri_prefix)
@@ -323,19 +348,13 @@ async def extract_data_page_by_page(file_content: bytes, content_type: str) -> L
         elif "image" in content_type:
             # --- Single Image Processing ---
             image = vision.Image(source=vision.ImageSource(gcs_image_uri=gcs_input_uri))
-            # --- FIX IS HERE --- (Corrected double underscore typo)
             feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
             request = vision.AnnotateImageRequest(image=image, features=[feature])
 
-            # --- FIX IS HERE ---
-            # Pass `request` as a positional argument, not a keyword argument
-            # to run_in_executor.
             response = await loop.run_in_executor(
                 None, vision_client.annotate_image, request
             )
-            # --- END OF FIX ---
             
-            # --- FIX IS HERE --- (Corrected typo from our previous conversation)
             result = _parse_mrz_from_response(response, page_num=1)
             all_results.append(result)
         
@@ -354,5 +373,3 @@ async def extract_data_page_by_page(file_content: bytes, content_type: str) -> L
             await _delete_gcs_blob(GCS_INPUT_BUCKET, gcs_input_filename)
 
     return all_results
-
-
