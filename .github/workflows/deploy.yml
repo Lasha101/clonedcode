@@ -1,5 +1,3 @@
-# .github/workflows/deploy.yml
-
 name: Deploy to EC2
 
 on:
@@ -15,21 +13,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up SSH and deploy
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to the project directory
-            cd clonedcode
-
-            # Pull the latest code from the main branch
+            # Navigate to project
+            cd clonedcode || exit 1
+            
+            # Get latest code
             git pull origin main
+            
+            # Create .env file from GitHub Secrets
+            echo "Creating .env file..."
+            cat <<EOF > .env
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            GCS_INPUT_BUCKET=${{ secrets.GCS_INPUT_BUCKET }}
+            GCS_OUTPUT_BUCKET=${{ secrets.GCS_OUTPUT_BUCKET }}
+            GCP_CREDS_JSON='${{ secrets.GCP_CREDS_JSON }}'
+            EOF
 
-            # Re-build the images that changed
-            sudo docker compose build
-
-            # Restart the services
-            sudo docker compose up -d
+            # Rebuild and restart containers
+            sudo docker compose down
+            sudo docker compose up -d --build --remove-orphans
+            
+            # Clean up space
+            sudo docker image prune -f

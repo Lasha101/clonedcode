@@ -1,26 +1,54 @@
-# 4. docker-compose.yml (at the project root)
-
 version: '3.8'
 
 services:
+  # --- 1. The Database (New Local DB) ---
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Saves data to your EC2 hard drive so it survives restarts
+      - ./postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- 2. The Backend (FastAPI) ---
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     restart: always
-    env_file: ./.env  # Load all variables from a .env file
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Connects to the 'db' service defined above
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - SECRET_KEY=${SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - GCP_CREDS_JSON=${GCP_CREDS_JSON}
+      - GCS_INPUT_BUCKET=${GCS_INPUT_BUCKET}
+      - GCS_OUTPUT_BUCKET=${GCS_OUTPUT_BUCKET}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     expose:
-      - "8000" # Internal port only
+      - "8000"
 
+  # --- 3. The Frontend (Nginx) ---
   nginx:
     build:
       context: .
       dockerfile: nginx.Dockerfile
       args:
-        # This matches the setup in your App.jsx
         VITE_API_URL: /api
     restart: always
     ports:
-      - "80:80" # Map EC2's public port 80 to this container's port 80
+      - "80:80"
     depends_on:
       - backend
