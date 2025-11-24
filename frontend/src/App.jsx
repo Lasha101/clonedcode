@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// --------------- START OF FILE: frontend/src/App.jsx ---------------
 
-// const API_URL = 'http://127.0.0.1:8000';
+import React, { useState, useEffect, useCallback } from 'react';
 
 // Use the build-time environment variable if it exists,
 // otherwise fall back to '/api' for local development.
@@ -64,7 +64,6 @@ const GlobalStyles = () => (
         .table thead th { background-color: #f8f9fa; font-weight: 600; }
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr:hover { background-color: #f1f3f5; }
-        /* Style for selected row */
         .table tbody tr.selected-row { background-color: rgba(42, 111, 219, 0.1); }
         .table th.checkbox-cell, .table td.checkbox-cell { width: 1%; text-align: center; }
         .filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
@@ -79,15 +78,11 @@ const GlobalStyles = () => (
         .job-monitor { background-color: var(--surface-color); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 2rem; }
         .job-monitor h3 { margin-top: 0; }
         .job-list { list-style-type: none; padding: 0; margin: 0; max-height: 400px; overflow-y: auto; }
-        .job-item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; }
+        .job-item { display: flex; flex-direction: column; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; gap: 0.5rem; }
         .job-item:last-child { margin-bottom: 0; }
+        .job-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
         .job-details { flex: 1; min-width: 200px; padding-right: 1rem; }
         .job-details strong { font-size: 1.1rem; }
-        .job-status { display: flex; align-items: center; gap: 0.5rem; }
-        .job-status-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; }
-        .job-status-processing { background-color: rgba(13, 202, 240, 0.1); color: var(--processing-color); }
-        .job-status-complete { background-color: rgba(25, 135, 84, 0.1); color: var(--success-color); }
-        .job-status-failed { background-color: rgba(220, 53, 69, 0.1); color: var(--danger-color); }
         .job-results-toggle { background: none; border: none; color: var(--primary-color); cursor: pointer; font-weight: 600; padding: 0.5rem; }
         .job-results-details { width: 100%; padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-color); }
         .results-summary { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
@@ -97,6 +92,16 @@ const GlobalStyles = () => (
         .result-icon { margin-right: 1rem; }
         .result-success .result-icon { color: var(--success-color); }
         .result-failure .result-icon { color: var(--danger-color); }
+
+        /* --- PROGRESS BAR STYLES --- */
+        .progress-container { width: 100%; background-color: #e9ecef; border-radius: 8px; height: 1.5rem; overflow: hidden; margin-top: 0.5rem; position: relative; }
+        .progress-fill { height: 100%; transition: width 0.6s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: visible; }
+        .progress-processing { background-color: var(--processing-color); background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem; animation: progress-bar-stripes 1s linear infinite; }
+        .progress-complete { background-color: var(--success-color); }
+        .progress-failed { background-color: var(--danger-color); }
+        .progress-text { position: absolute; width: 100%; text-align: center; left: 0; top: 0; line-height: 1.5rem; color: #333; font-size: 0.85rem; font-weight: 600; text-shadow: 0 0 2px rgba(255,255,255,0.8); pointer-events: none; }
+        
+        @keyframes progress-bar-stripes { 0% { background-position: 1rem 0; } 100% { background-position: 0 0; } }
     `}</style>
 );
 
@@ -118,7 +123,7 @@ const columnTranslations = {
     expires_at: 'Expire Le',
     is_used: 'Utilisé',
     actions: 'Actions',
-    uploaded_pages_count: 'Pages Traitées' // <-- NEW TRANSLATION
+    uploaded_pages_count: 'Pages Traitées'
 };
 
 // --- HELPER COMPONENTS & ICONS ---
@@ -138,13 +143,37 @@ function PasswordInput({ value, onChange, name, placeholder, required = false })
 
 const SuccessIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>);
 const FailureIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>);
-const LoadingIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" style={{ animation: 'spin 1s linear infinite' }}>
-        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-        <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
-        <path d="M10.72,19.9a8,8,0,0,1-6.5-9.79A7.77,7.77,0,0,1,10.4,4.16a8,8,0,0,1,9.49,6.52A1.54,1.54,0,0,0,21.38,12h.13a1.37,1.37,0,0,0,1.38-1.54,11,11,0,1,0-12.7,12.7A1.54,1.54,0,0,0,12,21.34h0A1.47,1.47,0,0,0,10.72,19.9Z" />
-    </svg>
-);
+
+// --- NEW: ProgressBar Component ---
+const ProgressBar = ({ progress, status }) => {
+    let statusClass = 'progress-processing';
+    let label = `${progress}% - Traitement en cours...`;
+
+    if (status === 'complete') {
+        statusClass = 'progress-complete';
+        label = 'Terminé';
+    } else if (status === 'failed') {
+        statusClass = 'progress-failed';
+        label = 'Échoué';
+    } else if (progress < 15) {
+        label = `${progress}% - Téléchargement...`;
+    } else if (progress < 75) {
+        label = `${progress}% - Analyse OCR...`;
+    } else {
+        label = `${progress}% - Écriture en Base de Données...`;
+    }
+
+    return (
+        <div className="progress-container">
+            <div 
+                className={`progress-fill ${statusClass}`} 
+                style={{ width: `${progress}%` }}
+            >
+            </div>
+            <div className="progress-text">{label}</div>
+        </div>
+    );
+};
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -295,19 +324,15 @@ function Dashboard({ user, token, fetchUser }) {
     }, [fetchAdminData, fetchUserDestinations]);
 
     const renderTabContent = () => {
-        // --- THIS IS THE KEY CHANGE ---
-        // Admins get a user filter.
-        // Regular users get a destination filter.
         const passportFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
             : [{ 
-                name: 'destination_filter', // This now matches the new param in main.py
+                name: 'destination_filter',
                 placeholder: 'Filtrer par Destination', 
-                options: userSpecificDestinations.map(d => ({ destination: d })), // Use the fetched list
+                options: userSpecificDestinations.map(d => ({ destination: d })),
                 getOptionValue: (o) => o.destination,
                 getOptionLabel: (o) => o.destination
               }];
-        // --- END OF KEY CHANGE ---
 
         const voyageFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
@@ -315,7 +340,6 @@ function Dashboard({ user, token, fetchUser }) {
             
         const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', delivery_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
         
-        // --- UPDATED USER FIELDS ---
         const userFields = { 
             first_name: 'text', 
             last_name: 'text', 
@@ -324,9 +348,8 @@ function Dashboard({ user, token, fetchUser }) {
             user_name: 'text', 
             password: 'password', 
             role: 'text', 
-            uploaded_pages_count: 'number' // <-- NEW FIELD
+            uploaded_pages_count: 'number'
         };
-        // --- END OF UPDATE ---
 
         switch (activeTab) {
             case 'account': return <AccountEditor user={user} token={token} fetchUser={fetchUser} />;
@@ -374,7 +397,6 @@ function AccountEditor({ user, token, fetchUser }) {
     };
     return (<div><h2>Modifier Mon Compte</h2>{message && <p className="success-message">{message}</p>}<form onSubmit={handleSubmit}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Numéro de téléphone</label><input type="text" name="phone_number" value={formData.phone_number} onChange={handleChange} className="form-input" /></div>
     
-    {/* --- THIS IS THE NEW READ-ONLY FIELD --- */}
     <div className="form-group">
         <label>{columnTranslations['uploaded_pages_count']}</label>
         <input 
@@ -386,7 +408,6 @@ function AccountEditor({ user, token, fetchUser }) {
             style={{ backgroundColor: '#f8f9fa' }}
         />
     </div>
-    {/* --- END OF NEW FIELD --- */}
 
     </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
 }
@@ -505,14 +526,12 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
     );
 }
 
-
-// --- OcrJobMonitor (MODIFIED) ---
+// --- OcrJobMonitor (PERSISTENT & PROGRESS BAR) ---
 function OcrJobMonitor({ token }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedJobId, setExpandedJobId] = useState(null);
-    // const [hiddenJobIds, setHiddenJobIds] = useState(new Set()); // <-- No longer needed
 
     const fetchJobs = useCallback(async () => {
         try {
@@ -533,25 +552,17 @@ function OcrJobMonitor({ token }) {
     }, [token]);
     
     useEffect(() => {
-        // Fetch immediately on mount
         fetchJobs();
-        
-        // Set an interval to poll every 5 seconds.
-        const interval = setInterval(fetchJobs, 5000); 
-
-        // Cleanup interval on unmount
+        const interval = setInterval(fetchJobs, 2000); // Poll every 2 seconds
         return () => clearInterval(interval);
     }, [fetchJobs]);
-
 
     const toggleJobDetails = (jobId) => {
         setExpandedJobId(prev => (prev === jobId ? null : jobId));
     };
 
-    // --- UPDATED HANDLER ---
-    // This function now calls the DELETE endpoint and removes the job from local state.
     const handleRemoveJob = async (jobIdToRemove) => {
-        setExpandedJobId(null); // Close the modal
+        setExpandedJobId(null);
         try {
             const response = await fetch(`${API_URL}/ocr/jobs/${jobIdToRemove}`, {
                 method: 'DELETE',
@@ -559,12 +570,10 @@ function OcrJobMonitor({ token }) {
             });
 
             if (response.ok) {
-                // Remove the job from the local state for immediate UI update
                 setJobs(prevJobs => prevJobs.filter(job => job.id !== jobIdToRemove));
             } else {
-                // Handle error (e.g., show a temporary error message)
                 console.error("Failed to delete job");
-                setError("Échec de la suppression du job."); // Show error in the monitor
+                setError("Échec de la suppression du job.");
             }
         } catch (err) {
             console.error("Error deleting job:", err);
@@ -583,7 +592,6 @@ function OcrJobMonitor({ token }) {
     if (isLoading) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
     if (error) return <p className="error-message">{error}</p>;
 
-    // We now render directly from the `jobs` state
     return (
         <div className="job-monitor">
             <h3>Suivi des Téléchargements de Passeports</h3>
@@ -593,36 +601,27 @@ function OcrJobMonitor({ token }) {
                 <ul className="job-list">
                     {jobs.map(job => (
                         <li key={job.id} className="job-item">
-                            <div className="job-details">
-                                <strong>{job.file_name}</strong>
-                                <br />
-                                <small style={{ color: 'var(--secondary-color)' }}>
-                                    {formatDate(job.created_at)}
-                                </small>
+                            <div className="job-header">
+                                <div className="job-details">
+                                    <strong>{job.file_name}</strong>
+                                    <br />
+                                    <small style={{ color: 'var(--secondary-color)' }}>
+                                        {formatDate(job.created_at)}
+                                    </small>
+                                </div>
+                                <div className="job-actions">
+                                     {/* Allow viewing results if job is done or failed */}
+                                     {(job.status === 'complete' || job.status === 'failed') && (
+                                        <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
+                                            {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                            <div className="job-status">
-                                {job.status === 'processing' && (
-                                    <span className="job-status-badge job-status-processing">
-                                        <LoadingIcon /> Traitement...
-                                    </span>
-                                )}
-                                {job.status === 'complete' && (
-                                    <span className="job-status-badge job-status-complete">
-                                        Terminé
-                                    </span>
-                                )}
-                                {job.status === 'failed' && (
-                                    <span className="job-status-badge job-status-failed">
-                                        Échoué
-                                    </span>
-                                )}
-                            </div>
-                            {job.status !== 'processing' && (
-                                <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
-                                    {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
-                                </button>
-                            )}
                             
+                            {/* PROGRESS BAR */}
+                            <ProgressBar progress={job.progress} status={job.status} />
+
                             {expandedJobId === job.id && (
                                 <div className="job-results-details">
                                     <p className="results-summary">
@@ -660,7 +659,6 @@ function OcrJobMonitor({ token }) {
     );
 }
 
-
 function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [items, setItems] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
@@ -668,8 +666,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [filters, setFilters] = useState({});
     const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
-    
-    // --- NEW STATE FOR MULTI-DELETE ---
     const [selectedIds, setSelectedIds] = useState(new Set());
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
@@ -710,7 +706,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             if (response.ok) setItems(await response.json());
             else console.error("Échec de la récupération des données pour", endpoint);
         } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
-        // Clear selection on new data fetch
         setSelectedIds(new Set());
     }, [endpoint, token, filters]);
     
@@ -727,7 +722,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setEditingItem(null); 
         setIsCreating(false); 
         setShowOcrUploader(false); 
-        setSelectedIds(new Set()); // Clear selection
+        setSelectedIds(new Set());
         fetchData(); 
     };
 
@@ -735,21 +730,20 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setEditingItem(null);
         setIsCreating(false);
         setShowOcrUploader(false);
-        setSelectedIds(new Set()); // Clear selection
+        setSelectedIds(new Set());
     }
 
     const startCreating = () => {
         let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
         if (endpoint === 'admin/users') {
             newItem.role = 'user';
-            newItem.uploaded_pages_count = 0; // Default for new user
+            newItem.uploaded_pages_count = 0;
         }
         if (endpoint === 'admin/invitations') newItem = { email: '' };
         setEditingItem(newItem);
         setIsCreating(true);
     };
 
-    // --- NEW HANDLERS FOR MULTI-DELETE ---
     const handleToggleSelect = (id) => {
         setSelectedIds(prev => {
             const newSet = new Set(prev);
@@ -783,7 +777,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     body: JSON.stringify(payload)
                 });
                 if (response.ok) {
-                    fetchData(); // Refreshes data and clears selection
+                    fetchData();
                 } else {
                     const errorData = await response.json();
                     alert(`Échec de la suppression multiple: ${errorData.detail}`);
@@ -793,8 +787,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             }
         }
     };
-    // --- END OF NEW HANDLERS ---
-
 
     if (showOcrUploader) {
         return <OcrUploader 
@@ -818,7 +810,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    {/* --- NEW MULTI-DELETE BUTTON --- */}
                     {endpoint === 'passports' && selectedIds.size > 0 && (
                         <button onClick={handleMultiDelete} className="btn btn-danger">
                             Supprimer la sélection ({selectedIds.size})
@@ -862,7 +853,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                 <table className="table">
                     <thead>
                         <tr>
-                            {/* --- NEW CHECKBOX HEADER --- */}
                             {endpoint === 'passports' && (
                                 <th className="checkbox-cell">
                                     <input
@@ -883,7 +873,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     <tbody>
                         {items.map(item => (
                             <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
-                                {/* --- NEW CHECKBOX CELL --- */}
                                 {endpoint === 'passports' && (
                                     <td className="checkbox-cell">
                                         <input
@@ -902,13 +891,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                                 })}
                                 <td>
                                     <button onClick={() => setEditingItem(item)} className="btn" style={{ backgroundColor: 'var(--warning-color)', color: 'black', marginRight: '0.5rem' }}>Modifier</button>
-                                    
-                                    {/* --- THIS IS THE CRUCIAL CHANGE --- */}
-                                    {/* The individual delete button is now conditional */}
                                     {endpoint !== 'passports' && (
                                         <button onClick={() => handleDelete(item.id)} className="btn btn-danger">Supprimer</button>
                                     )}
-                                    {/* --- END OF CHANGE --- */}
                                 </td>
                             </tr>
                         ))}
@@ -918,8 +903,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         </div>
     );
 }
-
-// --- (Rest of the file is unchanged) ---
 
 function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
     const [formData, setFormData] = useState(item);
@@ -1111,3 +1094,5 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
+
+// --------------- END OF FILE: frontend/src/App.jsx ---------------
