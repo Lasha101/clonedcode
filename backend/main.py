@@ -31,7 +31,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create database tables (including the new ocr_jobs table)
+# Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 # Initialize the rate limiter
@@ -47,23 +47,19 @@ async def run_ocr_extraction_task(
 ):
     """
     Background task that writes DIRECTLY to the DB table 'ocr_jobs'.
-    This solves the Gunicorn/Worker memory isolation issue.
     """
-    # Create a new independent database session for this thread
     db = SessionLocal()
     
     try:
-        # Retrieve the job created in the API endpoint
         job = db.query(models.OcrJob).filter(models.OcrJob.id == job_id).first()
         if not job:
             logger.error(f"Job {job_id} not found in DB task runner.")
             return
 
-        # STEP 1: Uploading/Pre-processing (10%)
+        # STEP 1: Uploading (10%)
         job.progress = 10 
         db.commit() 
         
-        # Call the OCR service (Heavy lifting)
         try:
             extraction_results = await ocr_service.extract_data_page_by_page(
                 file_content=file_content,
@@ -78,14 +74,14 @@ async def run_ocr_extraction_task(
             db.commit()
             return
         
-        # STEP 2: OCR Done, Starting Database Writes (75%)
+        # STEP 2: OCR Done (75%)
         job.progress = 75 
         db.commit()
 
         successes_list = []
         failures_list = []
         
-        # STEP 3: Process results and save passports to DB
+        # STEP 3: DB Writes
         total_items = len(extraction_results)
         
         for index, result in enumerate(extraction_results):
@@ -99,19 +95,16 @@ async def run_ocr_extraction_task(
                     if destination:
                         passport_data["destination"] = destination
                     
-                    # Validate
                     passport_create_schema = schemas.PassportCreate(**passport_data)
                     
-                    # Create Passport in DB
                     created_passport_model = crud.create_user_passport(
                         db=db, passport=passport_create_schema, user_id=user_id
                     )
                     
-                    # Convert to Schema to store in the JSON log
                     created_passport_schema = schemas.Passport.model_validate(created_passport_model)
                     
-                    # Append as dict for JSON column
-                    successes_list.append({"page_number": page_number, "data": created_passport_schema.model_dump()})
+                    # CRITICAL FIX: mode='json' converts 'date' objects to strings for the DB JSON column
+                    successes_list.append({"page_number": page_number, "data": created_passport_schema.model_dump(mode='json')})
 
                 except ValidationError as e:
                     first_error = e.errors()[0]
@@ -122,10 +115,8 @@ async def run_ocr_extraction_task(
                     detail = getattr(e, 'detail', f"Database Error: {str(e)}")
                     failures_list.append({"page_number": page_number, "detail": detail})
             
-            # Update progress incrementally (75% -> 95%)
             if total_items > 0:
                 current_progress = 75 + int((index + 1) / total_items * 20)
-                # Only commit if progress changed significantly to reduce DB load
                 if current_progress > job.progress:
                     job.progress = current_progress
                     db.commit()
@@ -136,14 +127,11 @@ async def run_ocr_extraction_task(
             user = db.query(models.User).filter(models.User.id == user_id).first()
             if user:
                 user.uploaded_pages_count += page_count
-                # db.commit() called at end
 
-        # STEP 5: Completion (100%)
+        # STEP 5: Finalize
         job.status = "complete"
         job.progress = 100
         job.finished_at = datetime.now()
-        
-        # Re-assign lists to ensure SQLAlchemy detects changes in JSON column
         job.successes = successes_list
         job.failures = failures_list
         
@@ -162,7 +150,6 @@ async def run_ocr_extraction_task(
         db.close()
 
 
-# --- Lifespan for application startup/shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = SessionLocal()
@@ -182,12 +169,10 @@ async def lifespan(app: FastAPI):
     db.close()
     yield
 
-# --- FastAPI App Initialization ---
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# --- CORS Middleware Configuration ---
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -198,7 +183,6 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-# --- Authentication Routes ---
 @app.post("/token", response_model=schemas.Token)
 @limiter.limit("5/minute")
 def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -212,7 +196,6 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
     access_token = auth.create_access_token(data={"sub": user.user_name})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# --- User Routes ---
 @app.post("/users/", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session = Depends(get_db)):
     invitation = crud.get_invitation_by_token(db, token)
@@ -241,7 +224,6 @@ def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db
         user_update.uploaded_pages_count = None
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
-# --- Admin User Management Routes ---
 @app.get("/admin/users/", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_users(skip: int = 0, limit: int = 100, name_filter: Optional[str] = Query(None), db: Session = Depends(get_db)):
     return crud.get_users(db, skip=skip, limit=limit, name_filter=name_filter)
@@ -277,28 +259,24 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
     return crud.create_user(db=db, user=user, role=user.role if hasattr(user, 'role') else 'user')
 
-# --- Passport Routes ---
 @app.post("/passports/", response_model=schemas.Passport)
 def create_passport(passport: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_passport(db=db, passport=passport, user_id=current_user.id)
 
-# --- OCR UPLOAD AND EXTRACTION ROUTE ---
 @app.post("/passports/upload-and-extract/", response_model=schemas.OcrJob)
 async def upload_and_extract_passport(
     background_tasks: BackgroundTasks,
     destination: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db), # Injected to create the initial Job record
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    
     file_content = await file.read()
     if not file_content:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
     job_id = str(uuid.uuid4())
     
-    # Create Job record in the database immediately
     new_job = models.OcrJob(
         id=job_id,
         user_id=current_user.id,
@@ -312,7 +290,6 @@ async def upload_and_extract_passport(
     db.commit()
     db.refresh(new_job)
 
-    # Pass the job_id to the background task
     background_tasks.add_task(
         run_ocr_extraction_task,
         job_id=job_id,
@@ -324,14 +301,11 @@ async def upload_and_extract_passport(
     
     return new_job
 
-# --- OCR JOB ROUTES (DB Driven) ---
-
 @app.get("/ocr/jobs/", response_model=List[schemas.OcrJob])
 async def get_ocr_jobs(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    # Query database for persistence across workers/restarts
     jobs = db.query(models.OcrJob).filter(
         models.OcrJob.user_id == current_user.id
     ).order_by(models.OcrJob.created_at.desc()).all()
@@ -361,7 +335,6 @@ async def delete_ocr_job(
         raise HTTPException(status_code=404, detail="Job not found.")
     if job.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized.")
-    
     db.delete(job)
     db.commit()
     return job
@@ -411,7 +384,6 @@ def read_passports(
 ):
     if current_user.role == "admin":
         return crud.get_passports(db=db, user_filter=user_filter, voyage_filter=voyage_filter)
-    
     return crud.get_passports_by_user(
         db=db, user_id=current_user.id, destination=destination_filter
     )
@@ -442,7 +414,6 @@ def delete_multiple_passports(
 ):
     if not payload.passport_ids:
         return {"deleted_count": 0}
-    
     deleted_count = crud.delete_multiple_passports(
         db=db,
         passport_ids=payload.passport_ids,
@@ -451,7 +422,6 @@ def delete_multiple_passports(
     )
     return {"deleted_count": deleted_count}
 
-# --- Voyage and Destination Routes ---
 @app.post("/voyages/", response_model=schemas.Voyage)
 def create_voyage(voyage: schemas.VoyageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_voyage(db=db, voyage=voyage, user_id=current_user.id, passport_ids=voyage.passport_ids)
@@ -487,7 +457,6 @@ def get_unique_destinations(user_id: Optional[int] = Query(None), db: Session = 
         target_user_id = user_id
     return crud.get_destinations_by_user_id(db, user_id=target_user_id)
 
-# --- Invitation Routes ---
 @app.get("/invitations/{token}", response_model=schemas.Invitation)
 def get_invitation(token: str, db: Session = Depends(get_db)):
     invitation = crud.get_invitation_by_token(db, token)

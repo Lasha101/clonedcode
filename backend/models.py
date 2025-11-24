@@ -26,16 +26,8 @@ class User(Base):
     uploaded_pages_count = Column(Integer, default=0, nullable=False)
 
     # RELATIONSHIPS
-    # 1. User -> Passports (One to Many)
-    # 'owner' matches the property name in the Passport class
     passports = relationship("Passport", back_populates="owner", cascade="all, delete-orphan")
-    
-    # 2. User -> Voyages (One to Many)
-    # 'user' matches the property name in the Voyage class
     voyages = relationship("Voyage", back_populates="user", cascade="all, delete-orphan")
-    
-    # 3. User -> OCR Jobs (One to Many)
-    # 'user' matches the property name in the OcrJob class
     ocr_jobs = relationship("OcrJob", back_populates="user", cascade="all, delete-orphan")
 
 class Passport(Base):
@@ -52,12 +44,7 @@ class Passport(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     
     # RELATIONSHIPS
-    # 1. Passport -> User
-    # 'passports' matches the property name in the User class
     owner = relationship("User", back_populates="passports")
-    
-    # 2. Passport -> Voyages (Many to Many)
-    # 'passports' matches the property name in the Voyage class
     voyages = relationship("Voyage", secondary=voyage_passport_association, back_populates="passports")
 
 class Voyage(Base):
@@ -67,13 +54,8 @@ class Voyage(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     
     # RELATIONSHIPS
-    # 1. Voyage -> User
-    # 'voyages' matches the property name in the User class
     user = relationship("User", back_populates="voyages")
-    
-    # 2. Voyage -> Passports (Many to Many)
-    # 'voyages' matches the property name in the Passport class
-    # CRITICAL: back_populates must match "voyages" (the property on Passport)
+    # FIX: back_populates must match the property name in Passport class ("voyages")
     passports = relationship("Passport", secondary=voyage_passport_association, back_populates="voyages")
 
 class Invitation(Base):
@@ -98,9 +80,6 @@ class OcrJob(Base):
     successes = Column(JSON, default=list) 
     failures = Column(JSON, default=list)
 
-    # RELATIONSHIPS
-    # 1. OcrJob -> User
-    # 'ocr_jobs' matches the property name in the User class
     user = relationship("User", back_populates="ocr_jobs")
 
 # --------------- END OF FILE: models.py ---------------
