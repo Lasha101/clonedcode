@@ -413,10 +413,9 @@ function AccountEditor({ user, token, fetchUser }) {
     </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
 }
 
-// --- OcrUploader ---
-function OcrUploader({ token, onUploadSuccess, onCancel }) {
+// --- OcrUploader (UPDATED: Delegates upload to parent) ---
+function OcrUploader({ token, onUpload, onCancel }) {
     const [file, setFile] = useState(null);
-    const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState('');
     const [destination, setDestination] = useState('');
     const [destinations, setDestinations] = useState([]);
@@ -442,15 +441,12 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
         setError('');
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (!file) {
             setError('Veuillez sélectionner un fichier à télécharger.');
             return;
         }
-
-        setIsUploading(true);
-        setError('');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -458,24 +454,8 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
             formData.append('destination', destination);
         }
 
-        try {
-            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData,
-            });
-
-            if (response.ok) {
-                onUploadSuccess();
-            } else {
-                const data = await response.json();
-                setError(data.detail || "Échec du démarrage du job de téléchargement.");
-            }
-        } catch (err) {
-            setError('Une erreur inattendue est survenue. Veuillez réessayer.');
-        } finally {
-            setIsUploading(false);
-        }
+        // Call parent handler directly to close modal immediately
+        onUpload(formData);
     };
 
     return (
@@ -513,13 +493,12 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
                         accept="image/png, image/jpeg, image/jpg, application/pdf"
                         className="form-input"
                         required
-                        disabled={isUploading}
                     />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }} disabled={isUploading}>Annuler</button>
-                    <button type="submit" className="btn btn-primary" disabled={isUploading || !file}>
-                        {isUploading ? 'Démarrage...' : 'Télécharger et Extraire'}
+                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
+                    <button type="submit" className="btn btn-primary" disabled={!file}>
+                        Télécharger et Extraire
                     </button>
                 </div>
             </form>
@@ -730,6 +709,33 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         fetchData(); 
     };
 
+    // --- UPDATED: HANDLES BACKGROUND UPLOAD ---
+    const handleUpload = async (formData) => {
+        // 1. Close Modal Immediately (Eliminates "Demarrage" screen)
+        setShowOcrUploader(false);
+        setSelectedIds(new Set());
+
+        // 2. Perform Upload in Background
+        try {
+            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                // Alert user if background upload failed (since modal is gone)
+                alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
+            } else {
+                // Success: OcrJobMonitor polling will pick up the new job automatically
+                fetchData(); // Optional: Refresh passport list
+            }
+        } catch (err) {
+            alert('Une erreur inattendue est survenue lors du téléchargement.');
+        }
+    };
+
     const handleCancel = () => {
         setEditingItem(null);
         setIsCreating(false);
@@ -793,9 +799,10 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     };
 
     if (showOcrUploader) {
+        // Pass handleUpload instead of handleSave
         return <OcrUploader 
             token={token} 
-            onUploadSuccess={handleSave} 
+            onUpload={handleUpload} 
             onCancel={() => setShowOcrUploader(false)} 
         />
     }
@@ -953,6 +960,120 @@ function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token 
     if (formFields.confidence_score) { delete formFields.confidence_score; }
     if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
     return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
+}
+
+function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
+    const [filters, setFilters] = useState({ user_id: '', destination: '' });
+    const [previewData, setPreviewData] = useState(null);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteMsg, setInviteMsg] = useState('');
+    const [invitationLink, setInvitationLink] = useState('');
+
+    const handleFilterChange = (name, value) => { 
+        setFilters(prev => ({ ...prev, [name]: value })); 
+        setPreviewData(null); 
+    };
+
+    const getFilteredData = async () => {
+        const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
+        if (user.role !== 'admin') {
+            delete activeFilters.user_id;
+        }
+        const query = new URLSearchParams(activeFilters).toString();
+        try {
+            const response = await fetch(`${API_URL}/export/data?${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) { 
+                const err = await response.json();
+                alert(`Échec de la récupération des données: ${err.detail}`); 
+                return null; 
+            }
+            return response;
+        } catch (error) { alert('Une erreur est survenue lors de la récupération des données.'); return null; }
+    };
+
+    const handlePreview = async () => {
+        const response = await getFilteredData();
+        if (response) {
+            const csvText = await response.text();
+            if (!csvText) { setPreviewData([]); return; }
+            const rows = csvText.trim().split('\n');
+            const headers = rows[0].split(',');
+            const data = rows.slice(1).map(row => { const values = row.split(','); return headers.reduce((obj, h, i) => ({ ...obj, [h]: values[i] }), {}); });
+            setPreviewData(data);
+        }
+    };
+    
+    const handleExport = async () => {
+        const response = await getFilteredData();
+        if (response) {
+            const blob = await response.blob();
+            const contentDisposition = response.headers.get('content-disposition');
+            const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'passports_export.csv';
+            const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+            setPreviewData(null);
+        }
+    };
+
+    const handleInvite = async () => {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) { setInviteMsg('Veuillez entrer une adresse email valide.'); return; }
+        setInviteMsg('Génération du lien...'); setInvitationLink('');
+        try {
+            const response = await fetch(`${API_URL}/admin/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ email: inviteEmail }), });
+            const data = await response.json();
+            if (response.ok) { const link = `${window.location.origin}/register/${data.token}`; setInvitationLink(link); setInviteMsg('Lien généré. Copiez-le et envoyez-le à l\'utilisateur.'); } else { setInviteMsg(data.detail || 'Échec de la création de l\'invitation.'); }
+        } catch (error) { setInviteMsg('Une erreur est survenue.'); }
+    };
+
+    return (
+        <div>
+            <h2>Outils & Exportation</h2>
+            {user.role === 'admin' && (
+                <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem', marginBottom: '2rem' }}>
+                    <h3>Inviter un nouvel utilisateur</h3>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <input type="email" placeholder="Entrez l'email de l'utilisateur" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="form-input" style={{ flexGrow: 1 }} />
+                        <button onClick={handleInvite} className="btn btn-primary" style={{ backgroundColor: 'var(--warning-color)', color: 'black' }}>Générer le lien</button>
+                    </div>
+                    {inviteMsg && <p className="info-message mt-1">{inviteMsg}</p>}
+                    {invitationLink && (
+                        <div className="mt-1">
+                            <input type="text" readOnly value={invitationLink} className="form-input" onClick={e => e.target.select()} />
+                        </div>
+                    )}
+                </div>
+            )}
+            <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}>
+                <h3>Filtrer et Exporter les Données des Passeports</h3>
+                <div className="filter-bar mb-1">
+                    {user.role === 'admin' && (
+                        <ComboBoxFilter 
+                            name="user_id" 
+                            placeholder="Filtrer par Utilisateur" 
+                            options={adminUsers} 
+                            getOptionValue={(o) => o.id} 
+                            getOptionLabel={(o) => `${o.first_name} ${o.last_name} (${o.user_name})`} 
+                            onChange={handleFilterChange} 
+                        />
+                    )}
+                     <ComboBoxFilter 
+                        name="destination" 
+                        placeholder="Filtrer par Destination" 
+                        options={userDestinations.map(d => ({ destination: d }))} 
+                        getOptionValue={(o) => o.destination} 
+                        getOptionLabel={(o) => o.destination} 
+                        onChange={handleFilterChange} 
+                    />
+                </div>
+                <button onClick={handlePreview} className="btn btn-primary">Aperçu des Données</button>
+                {previewData && (
+                    <>
+                        <PreviewTable data={previewData} />
+                        <button onClick={handleExport} className="btn mt-1" style={{ backgroundColor: 'var(--success-color)', color: 'white' }}>Télécharger en CSV</button>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 }
 
 function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionLabel, onChange }) {
