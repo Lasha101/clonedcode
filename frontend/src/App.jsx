@@ -1,6 +1,6 @@
 // --------------- START OF FILE: frontend/src/App.jsx ---------------
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // Use the build-time environment variable if it exists,
 // otherwise fall back to '/api' for local development.
@@ -156,6 +156,9 @@ const ProgressBar = ({ progress, status }) => {
     } else if (status === 'failed') {
         statusClass = 'progress-failed';
         label = 'Échoué';
+    } else if (progress === 0) {
+        // NEW: Special case for instant feedback
+        label = "Démarrage du téléchargement..."; 
     } else if (progress < 15) {
         label = `${progress}% - Téléchargement...`;
     } else if (progress < 75) {
@@ -168,7 +171,7 @@ const ProgressBar = ({ progress, status }) => {
         <div className="progress-container">
             <div 
                 className={`progress-fill ${statusClass}`} 
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress > 0 ? progress : 5}%` }} // Always show at least a sliver for visibility
             >
             </div>
             <div className="progress-text">{label}</div>
@@ -413,7 +416,7 @@ function AccountEditor({ user, token, fetchUser }) {
     </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
 }
 
-// --- OcrUploader (UPDATED: Delegates upload to parent) ---
+// --- OcrUploader (Delegates upload to parent) ---
 function OcrUploader({ token, onUpload, onCancel }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState('');
@@ -454,8 +457,8 @@ function OcrUploader({ token, onUpload, onCancel }) {
             formData.append('destination', destination);
         }
 
-        // Call parent handler directly to close modal immediately
-        onUpload(formData);
+        // Pass file object too so we can display name immediately
+        onUpload(formData, file);
     };
 
     return (
@@ -506,12 +509,14 @@ function OcrUploader({ token, onUpload, onCancel }) {
     );
 }
 
-// --- OcrJobMonitor (UPDATED - Delete Button in Header) ---
-function OcrJobMonitor({ token }) {
+// --- OcrJobMonitor (UPDATED - Optimistic UI + Auto Complete) ---
+function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedJobId, setExpandedJobId] = useState(null);
+    
+    const knownCompletedRef = useRef(new Set());
 
     const fetchJobs = useCallback(async () => {
         try {
@@ -521,6 +526,20 @@ function OcrJobMonitor({ token }) {
             if (response.ok) {
                 const data = await response.json();
                 setJobs(data);
+
+                let hasNewCompletion = false;
+                data.forEach(job => {
+                    if (job.status === 'complete' || job.status === 'failed') {
+                        if (!knownCompletedRef.current.has(job.id)) {
+                            knownCompletedRef.current.add(job.id);
+                            hasNewCompletion = true;
+                        }
+                    }
+                });
+
+                if (hasNewCompletion) {
+                    onJobComplete();
+                }
             } else {
                 setError('Échec de la récupération des jobs OCR.');
             }
@@ -529,13 +548,19 @@ function OcrJobMonitor({ token }) {
         } finally {
             setIsLoading(false);
         }
-    }, [token]);
+    }, [token, onJobComplete]);
     
     useEffect(() => {
         fetchJobs();
-        const interval = setInterval(fetchJobs, 2000); // Poll every 2 seconds
+        const interval = setInterval(fetchJobs, 2000);
         return () => clearInterval(interval);
     }, [fetchJobs]);
+
+    useEffect(() => {
+        if (refreshTrigger > 0) {
+            fetchJobs();
+        }
+    }, [refreshTrigger, fetchJobs]);
 
     const toggleJobDetails = (jobId) => {
         setExpandedJobId(prev => (prev === jobId ? null : jobId));
@@ -570,16 +595,33 @@ function OcrJobMonitor({ token }) {
         });
     };
 
-    if (isLoading) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
+    if (isLoading && !uploadingFile) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
     if (error) return <p className="error-message">{error}</p>;
 
     return (
         <div className="job-monitor">
             <h3>Suivi des Téléchargements de Passeports</h3>
-            {jobs.length === 0 ? (
+            
+            {jobs.length === 0 && !uploadingFile ? (
                 <p className="info-message">Aucun document n'a encore été téléchargé.</p>
             ) : (
                 <ul className="job-list">
+                    {/* --- OPTIMISTIC UI: Virtual Job Card --- */}
+                    {uploadingFile && (
+                        <li className="job-item" style={{ opacity: 0.7 }}>
+                            <div className="job-header">
+                                <div className="job-details">
+                                    <strong>{uploadingFile.name}</strong>
+                                    <br />
+                                    <small style={{ color: 'var(--secondary-color)' }}>À l'instant</small>
+                                </div>
+                            </div>
+                            {/* Render fake progress bar immediately */}
+                            <ProgressBar progress={0} status="processing" />
+                        </li>
+                    )}
+                    {/* --------------------------------------- */}
+
                     {jobs.map(job => (
                         <li key={job.id} className="job-item">
                             <div className="job-header">
@@ -591,14 +633,11 @@ function OcrJobMonitor({ token }) {
                                     </small>
                                 </div>
                                 <div className="job-actions">
-                                     {/* Allow viewing results if job is done or failed */}
                                      {(job.status === 'complete' || job.status === 'failed') && (
                                         <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
                                             {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
                                         </button>
                                     )}
-                                    
-                                    {/* --- FIX: DELETE BUTTON ALWAYS VISIBLE HERE --- */}
                                     <button 
                                         onClick={() => handleRemoveJob(job.id)} 
                                         className="btn btn-danger"
@@ -606,11 +645,9 @@ function OcrJobMonitor({ token }) {
                                     >
                                         Supprimer
                                     </button>
-                                    {/* --------------------------------------------- */}
                                 </div>
                             </div>
                             
-                            {/* PROGRESS BAR */}
                             <ProgressBar progress={job.progress} status={job.status} />
 
                             {expandedJobId === job.id && (
@@ -650,6 +687,10 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    
+    // --- NEW STATE ---
+    const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
+    const [uploadingFile, setUploadingFile] = useState(null); // Track active upload for UI
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -709,13 +750,16 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         fetchData(); 
     };
 
-    // --- UPDATED: HANDLES BACKGROUND UPLOAD ---
-    const handleUpload = async (formData) => {
-        // 1. Close Modal Immediately (Eliminates "Demarrage" screen)
+    // --- UPDATED: HANDLES BACKGROUND UPLOAD + OPTIMISTIC UI ---
+    const handleUpload = async (formData, fileObj) => {
+        // 1. Set Optimistic State
+        setUploadingFile(fileObj);
+        
+        // 2. Close Modal
         setShowOcrUploader(false);
         setSelectedIds(new Set());
 
-        // 2. Perform Upload in Background
+        // 3. Perform Upload
         try {
             const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
                 method: 'POST',
@@ -725,16 +769,23 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
             if (!response.ok) {
                 const data = await response.json();
-                // Alert user if background upload failed (since modal is gone)
                 alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
             } else {
-                // Success: OcrJobMonitor polling will pick up the new job automatically
-                fetchData(); // Optional: Refresh passport list
+                // Success: The job exists on server now.
+                setRefreshJobsTrigger(prev => prev + 1);
             }
         } catch (err) {
             alert('Une erreur inattendue est survenue lors du téléchargement.');
+        } finally {
+            // Clear optimistic state so real job list takes over
+            setUploadingFile(null);
         }
     };
+    
+    // Callback for OcrJobMonitor to refresh main data table
+    const handleJobComplete = useCallback(() => {
+        fetchData();
+    }, [fetchData]);
 
     const handleCancel = () => {
         setEditingItem(null);
@@ -816,7 +867,14 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
     return (
         <div>
-            {endpoint === 'passports' && <OcrJobMonitor token={token} />}
+            {endpoint === 'passports' && (
+                <OcrJobMonitor 
+                    token={token} 
+                    refreshTrigger={refreshJobsTrigger}
+                    onJobComplete={handleJobComplete}
+                    uploadingFile={uploadingFile}
+                />
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
