@@ -1,5 +1,3 @@
-# --------------- START OF FILE: main.py ---------------
-
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
@@ -15,9 +13,8 @@ import crud, models, schemas, auth
 from database import SessionLocal, engine, get_db
 from typing import Optional, List, Dict, Any
 import ocr_service
-import logging
-import uuid
-import json 
+import logging # Added for better logging
+import uuid # <-- NEW: For Job IDs
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -37,126 +34,133 @@ models.Base.metadata.create_all(bind=engine)
 # Initialize the rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
-# --- Background Task Function ---
+# --- NEW: In-Memory Job Database ---
+# This will store all OCR jobs. For real persistence, replace this
+# with a new table in your SQL database.
+OCR_JOBS: Dict[str, Dict[str, Any]] = {}
+
+
+# --- NEW: Background Task Function ---
 async def run_ocr_extraction_task(
     job_id: str,
     file_content: bytes,
     content_type: str,
     destination: Optional[str],
-    user_id: int
+    user_id: int,
+    db: Session # We need to pass a session here
 ):
     """
-    Background task that writes DIRECTLY to the DB table 'ocr_jobs'.
+    This function runs in the background.
+    It performs the full OCR extraction and DB write.
     """
-    db = SessionLocal()
-    
+    global OCR_JOBS
+    job = OCR_JOBS.get(job_id)
+    if not job:
+        logger.error(f"Job {job_id} not found in task runner.")
+        db.close() # Close session
+        return
+
     try:
-        job = db.query(models.OcrJob).filter(models.OcrJob.id == job_id).first()
-        if not job:
-            logger.error(f"Job {job_id} not found in DB task runner.")
-            return
+        # 1. Call the OCR service (long-running step)
+        extraction_results = await ocr_service.extract_data_page_by_page(
+            file_content=file_content,
+            content_type=content_type
+        )
+    except Exception as e:
+        logger.error(f"Error during page-by-page extraction for job {job_id}: {e}", exc_info=True)
+        job["status"] = "failed"
+        job["finished_at"] = datetime.now()
+        job["failures"] = [{"page_number": 1, "detail": f"Traitement global du document échoué: {str(e)}"}]
+        db.close() # Close session on failure too
+        return
 
-        # STEP 1: Uploading (10%)
-        job.progress = 10 
-        db.commit() 
-        
+    successes = []
+    failures = []
+    
+    # 2. Process results and save to DB
+    for result in extraction_results:
+        page_number = result.get("page_number")
+
+        if "error" in result:
+            failures.append({"page_number": page_number, "detail": result["error"]})
+            continue
+
+        if "data" in result:
+            passport_data = result["data"]
+            try:
+                if destination:
+                    passport_data["destination"] = destination
+                
+                # We validate the data using the schema
+                passport_create_schema = schemas.PassportCreate(**passport_data)
+                
+                # We save the validated data to the DB
+                # IMPORTANT: We use the `db` session passed into this task
+                created_passport_model = crud.create_user_passport(
+                    db=db, passport=passport_create_schema, user_id=user_id
+                )
+                
+                # --- FIX from last time ---
+                # Convert the live SQLAlchemy model to a Pydantic schema *while the session is active*.
+                created_passport_schema = schemas.Passport.model_validate(created_passport_model)
+                
+                # Add the *Pydantic schema* (which is just data) to the success list.
+                successes.append({"page_number": page_number, "data": created_passport_schema})
+                # --- END OF FIX ---
+
+            except ValidationError as e:
+                first_error = e.errors()[0]
+                error_message = f"Validation Error on field '{first_error['loc'][0]}': {first_error['msg']}"
+                failures.append({"page_number": page_number, "detail": error_message})
+            except HTTPException as e:
+                # Catch duplicate errors from crud
+                failures.append({"page_number": page_number, "detail": e.detail})
+            except Exception as e:
+                detail = getattr(e, 'detail', f"A database error occurred: {str(e)}")
+                failures.append({"page_number": page_number, "detail": detail})
+    
+    # --- NEW: Increment User's Page Count ---
+    # We do this after processing all pages, based on the *total number of pages returned by the OCR service*.
+    page_count = len(extraction_results)
+    if page_count > 0:
         try:
-            extraction_results = await ocr_service.extract_data_page_by_page(
-                file_content=file_content,
-                content_type=content_type
-            )
-        except Exception as e:
-            logger.error(f"OCR Service failed for job {job_id}: {e}")
-            job.status = "failed"
-            job.progress = 0
-            job.finished_at = datetime.now()
-            job.failures = [{"page_number": 0, "detail": f"Traitement global échoué: {str(e)}"}]
-            db.commit()
-            return
-        
-        # STEP 2: OCR Done (75%)
-        job.progress = 75 
-        db.commit()
-
-        successes_list = []
-        failures_list = []
-        
-        # STEP 3: DB Writes
-        total_items = len(extraction_results)
-        
-        for index, result in enumerate(extraction_results):
-            page_number = result.get("page_number")
-
-            if "error" in result:
-                failures_list.append({"page_number": page_number, "detail": result["error"]})
-            elif "data" in result:
-                passport_data = result["data"]
-                try:
-                    if destination:
-                        passport_data["destination"] = destination
-                    
-                    passport_create_schema = schemas.PassportCreate(**passport_data)
-                    
-                    created_passport_model = crud.create_user_passport(
-                        db=db, passport=passport_create_schema, user_id=user_id
-                    )
-                    
-                    created_passport_schema = schemas.Passport.model_validate(created_passport_model)
-                    
-                    # CRITICAL FIX: mode='json' converts 'date' objects to strings for the DB JSON column
-                    successes_list.append({"page_number": page_number, "data": created_passport_schema.model_dump(mode='json')})
-
-                except ValidationError as e:
-                    first_error = e.errors()[0]
-                    failures_list.append({"page_number": page_number, "detail": f"Validation: {first_error['msg']}"})
-                except HTTPException as e:
-                    failures_list.append({"page_number": page_number, "detail": e.detail})
-                except Exception as e:
-                    detail = getattr(e, 'detail', f"Database Error: {str(e)}")
-                    failures_list.append({"page_number": page_number, "detail": detail})
-            
-            if total_items > 0:
-                current_progress = 75 + int((index + 1) / total_items * 20)
-                if current_progress > job.progress:
-                    job.progress = current_progress
-                    db.commit()
-
-        # STEP 4: Update User Stats
-        page_count = len(extraction_results)
-        if page_count > 0:
             user = db.query(models.User).filter(models.User.id == user_id).first()
             if user:
+                if user.uploaded_pages_count is None: # Handle null values just in case
+                    user.uploaded_pages_count = 0
                 user.uploaded_pages_count += page_count
+                db.commit()
+                logger.info(f"Incremented page count for user {user_id} by {page_count}. New total: {user.uploaded_pages_count}")
+            else:
+                logger.warning(f"Could not find user {user_id} to increment page count.")
+        except Exception as e:
+            logger.error(f"Failed to increment page count for user {user_id}: {e}", exc_info=True)
+            db.rollback() # Rollback this specific error, but let the task complete
+    # --- END OF NEW LOGIC ---
 
-        # STEP 5: Finalize
-        job.status = "complete"
-        job.progress = 100
-        job.finished_at = datetime.now()
-        job.successes = successes_list
-        job.failures = failures_list
-        
-        db.commit()
-        logger.info(f"Job {job_id} completed successfully.")
-
-    except Exception as e:
-        logger.error(f"CRITICAL SYSTEM ERROR Job {job_id}: {e}", exc_info=True)
-        try:
-            job.status = "failed"
-            job.failures = [{"page_number": 0, "detail": f"System error: {str(e)}"}]
-            db.commit()
-        except:
-            pass
-    finally:
-        db.close()
+    # 3. Update the job in our in-memory DB
+    job["status"] = "complete"
+    job["finished_at"] = datetime.now()
+    job["successes"] = successes
+    job["failures"] = failures
+    
+    logger.info(f"Job {job_id} completed. {len(successes)} successes, {len(failures)} failures.")
+    
+    # 4. Close the database session
+    db.close()
 
 
+# --- Lifespan for application startup/shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = SessionLocal()
+    # Create a default admin user on startup if one doesn't exist
     admin_user = crud.get_user_by_username(db, username="admin")
     if not admin_user:
         ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-        if ADMIN_PASSWORD:
+        if not ADMIN_PASSWORD:
+            print("WARNING: ADMIN_PASSWORD environment variable not set. Admin user not created.")
+        else:
             admin = schemas.UserCreate(
                 first_name="Admin",
                 last_name="User",
@@ -168,12 +172,15 @@ async def lifespan(app: FastAPI):
             crud.create_user(db=db, user=admin, role="admin", token=None)
     db.close()
     yield
+    # Code to run on shutdown can go here
 
+# --- FastAPI App Initialization ---
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-origins = ["*"]
+# --- CORS Middleware Configuration ---
+origins = ["*"] # Allow all origins for simplicity
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -183,6 +190,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+# --- Authentication Routes ---
 @app.post("/token", response_model=schemas.Token)
 @limiter.limit("5/minute")
 def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -196,6 +204,7 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
     access_token = auth.create_access_token(data={"sub": user.user_name})
     return {"access_token": access_token, "token_type": "bearer"}
 
+# --- User Routes ---
 @app.post("/users/", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session = Depends(get_db)):
     invitation = crud.get_invitation_by_token(db, token)
@@ -220,10 +229,12 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 @app.put("/users/me", response_model=schemas.User)
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
+    # User cannot update their own page count
     if user_update.uploaded_pages_count is not None:
         user_update.uploaded_pages_count = None
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
+# --- Admin User Management Routes ---
 @app.get("/admin/users/", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_users(skip: int = 0, limit: int = 100, name_filter: Optional[str] = Query(None), db: Session = Depends(get_db)):
     return crud.get_users(db, skip=skip, limit=limit, name_filter=name_filter)
@@ -244,6 +255,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 
 @app.put("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
 def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+    # Admin can update page count
     db_user = crud.update_user(db=db, user_id=user_id, user_update=user_update)
     if db_user is None:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
@@ -259,57 +271,80 @@ def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà enregistré")
     return crud.create_user(db=db, user=user, role=user.role if hasattr(user, 'role') else 'user')
 
+# --- Passport Routes ---
 @app.post("/passports/", response_model=schemas.Passport)
 def create_passport(passport: schemas.PassportCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_passport(db=db, passport=passport, user_id=current_user.id)
 
+# --- OCR UPLOAD AND EXTRACTION ROUTE (MODIFIED) ---
 @app.post("/passports/upload-and-extract/", response_model=schemas.OcrJob)
 async def upload_and_extract_passport(
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # <-- NEW
     destination: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    # db: Session = Depends(get_db), <-- We get a new session for the task
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
+    global OCR_JOBS
+    
     file_content = await file.read()
     if not file_content:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
+    # 1. Create a new Job ID
     job_id = str(uuid.uuid4())
     
-    new_job = models.OcrJob(
-        id=job_id,
-        user_id=current_user.id,
-        file_name=file.filename,
-        status="processing",
-        progress=0,
-        successes=[],
-        failures=[]
-    )
-    db.add(new_job)
-    db.commit()
-    db.refresh(new_job)
+    # 2. Create the job object
+    job = {
+        "id": job_id,
+        "user_id": current_user.id,
+        "file_name": file.filename,
+        "status": "processing", # Start as "processing"
+        "created_at": datetime.now(),
+        "finished_at": None,
+        "successes": [],
+        "failures": [],
+    }
+    
+    # 3. Save job to our in-memory DB
+    OCR_JOBS[job_id] = job
 
+    # 4. Create a new DB session for the background task
+    db_task = SessionLocal()
+
+    # 5. Add the *real* work to a background task
     background_tasks.add_task(
         run_ocr_extraction_task,
         job_id=job_id,
         file_content=file_content,
         content_type=file.content_type,
         destination=destination,
-        user_id=current_user.id
+        user_id=current_user.id,
+        db=db_task # Pass the new session
     )
     
-    return new_job
+    # 6. Return the job object to the frontend IMMEDIATELY
+    return job
+
+
+# --- NEW OCR JOB ROUTES ---
 
 @app.get("/ocr/jobs/", response_model=List[schemas.OcrJob])
 async def get_ocr_jobs(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    jobs = db.query(models.OcrJob).filter(
-        models.OcrJob.user_id == current_user.id
-    ).order_by(models.OcrJob.created_at.desc()).all()
-    return jobs
+    """
+    Get all OCR jobs for the current user.
+    """
+    global OCR_JOBS
+    # Filter in-memory dict for jobs belonging to the current user
+    user_jobs = [
+        job for job in OCR_JOBS.values() if job["user_id"] == current_user.id
+    ]
+    # Sort by creation date, newest first
+    user_jobs.sort(key=lambda j: j["created_at"], reverse=True)
+    return user_jobs
 
 @app.get("/ocr/jobs/{job_id}", response_model=schemas.OcrJob)
 async def get_ocr_job(
@@ -317,27 +352,48 @@ async def get_ocr_job(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    job = db.query(models.OcrJob).filter(models.OcrJob.id == job_id).first()
+    """
+    Get the status of a single OCR job.
+    """
+    global OCR_JOBS
+    job = OCR_JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
-    if job.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized.")
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this job.")
     return job
 
+# --- THIS IS THE NEW DELETE ROUTE ---
 @app.delete("/ocr/jobs/{job_id}", response_model=schemas.OcrJob)
 async def delete_ocr_job(
     job_id: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    job = db.query(models.OcrJob).filter(models.OcrJob.id == job_id).first()
+    """
+    Deletes a job notification from the in-memory store.
+    """
+    global OCR_JOBS
+    job = OCR_JOBS.get(job_id)
+    
+    # Check if job exists
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
-    if job.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized.")
-    db.delete(job)
-    db.commit()
-    return job
+    
+    # Check if the user is authorized to delete this job
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this job.")
+    
+    # Pop the job from the dictionary
+    deleted_job = OCR_JOBS.pop(job_id, None)
+    
+    if deleted_job is None:
+        # This might happen in a race condition, though unlikely
+        raise HTTPException(status_code=404, detail="Job not found during deletion.")
+        
+    return deleted_job
+# --- END OF NEW DELETE ROUTE ---
+
 
 @app.get("/export/data")
 def export_data(
@@ -380,10 +436,12 @@ def read_passports(
     db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user),
     user_filter: Optional[str] = Query(None), 
     voyage_filter: Optional[str] = Query(None),
-    destination_filter: Optional[str] = Query(None)
+    destination_filter: Optional[str] = Query(None) # <-- NEW FILTER
 ):
     if current_user.role == "admin":
         return crud.get_passports(db=db, user_filter=user_filter, voyage_filter=voyage_filter)
+    
+    # Non-admin users now get filtered results
     return crud.get_passports_by_user(
         db=db, user_id=current_user.id, destination=destination_filter
     )
@@ -406,6 +464,7 @@ def delete_passport(passport_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=403, detail="Non autorisé à supprimer ce passeport")
     return crud.delete_passport(db=db, passport_id=passport_id)
 
+# --- NEW: MULTI-DELETE ENDPOINT ---
 @app.post("/passports/delete-multiple", response_model=dict)
 def delete_multiple_passports(
     payload: schemas.PassportDeleteMultiple,
@@ -414,6 +473,7 @@ def delete_multiple_passports(
 ):
     if not payload.passport_ids:
         return {"deleted_count": 0}
+    
     deleted_count = crud.delete_multiple_passports(
         db=db,
         passport_ids=payload.passport_ids,
@@ -421,7 +481,10 @@ def delete_multiple_passports(
         role=current_user.role
     )
     return {"deleted_count": deleted_count}
+# --- END OF NEW MULTI-DELETE ENDPOINT ---
 
+
+# --- Voyage and Destination Routes ---
 @app.post("/voyages/", response_model=schemas.Voyage)
 def create_voyage(voyage: schemas.VoyageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.create_user_voyage(db=db, voyage=voyage, user_id=current_user.id, passport_ids=voyage.passport_ids)
@@ -457,6 +520,7 @@ def get_unique_destinations(user_id: Optional[int] = Query(None), db: Session = 
         target_user_id = user_id
     return crud.get_destinations_by_user_id(db, user_id=target_user_id)
 
+# --- Invitation Routes ---
 @app.get("/invitations/{token}", response_model=schemas.Invitation)
 def get_invitation(token: str, db: Session = Depends(get_db)):
     invitation = crud.get_invitation_by_token(db, token)
@@ -495,5 +559,3 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 @app.get("/admin/filterable-users", response_model=list[schemas.User], dependencies=[Depends(auth.require_admin)])
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
-
-# --------------- END OF FILE: main.py ---------------
