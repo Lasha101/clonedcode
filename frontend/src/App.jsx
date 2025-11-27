@@ -1,6 +1,6 @@
 // --------------- START OF FILE: frontend/src/App.jsx ---------------
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 // Use the build-time environment variable if it exists,
 // otherwise fall back to '/api' for local development.
@@ -156,8 +156,6 @@ const ProgressBar = ({ progress, status }) => {
     } else if (status === 'failed') {
         statusClass = 'progress-failed';
         label = 'Échoué';
-    } else if (progress === 0) {
-        label = "Démarrage du téléchargement..."; 
     } else if (progress < 15) {
         label = `${progress}% - Téléchargement...`;
     } else if (progress < 75) {
@@ -170,7 +168,7 @@ const ProgressBar = ({ progress, status }) => {
         <div className="progress-container">
             <div 
                 className={`progress-fill ${statusClass}`} 
-                style={{ width: `${progress > 0 ? progress : 5}%` }}
+                style={{ width: `${progress}%` }}
             >
             </div>
             <div className="progress-text">{label}</div>
@@ -415,9 +413,10 @@ function AccountEditor({ user, token, fetchUser }) {
     </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
 }
 
-// --- OcrUploader (Delegates upload to parent) ---
-function OcrUploader({ token, onUpload, onCancel }) {
+// --- OcrUploader ---
+function OcrUploader({ token, onUploadSuccess, onCancel }) {
     const [file, setFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState('');
     const [destination, setDestination] = useState('');
     const [destinations, setDestinations] = useState([]);
@@ -443,12 +442,15 @@ function OcrUploader({ token, onUpload, onCancel }) {
         setError('');
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!file) {
             setError('Veuillez sélectionner un fichier à télécharger.');
             return;
         }
+
+        setIsUploading(true);
+        setError('');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -456,8 +458,24 @@ function OcrUploader({ token, onUpload, onCancel }) {
             formData.append('destination', destination);
         }
 
-        // Pass file object so we can display name immediately
-        onUpload(formData, file);
+        try {
+            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData,
+            });
+
+            if (response.ok) {
+                onUploadSuccess();
+            } else {
+                const data = await response.json();
+                setError(data.detail || "Échec du démarrage du job de téléchargement.");
+            }
+        } catch (err) {
+            setError('Une erreur inattendue est survenue. Veuillez réessayer.');
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     return (
@@ -495,12 +513,13 @@ function OcrUploader({ token, onUpload, onCancel }) {
                         accept="image/png, image/jpeg, image/jpg, application/pdf"
                         className="form-input"
                         required
+                        disabled={isUploading}
                     />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
-                    <button type="submit" className="btn btn-primary" disabled={!file}>
-                        Télécharger et Extraire
+                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }} disabled={isUploading}>Annuler</button>
+                    <button type="submit" className="btn btn-primary" disabled={isUploading || !file}>
+                        {isUploading ? 'Démarrage...' : 'Télécharger et Extraire'}
                     </button>
                 </div>
             </form>
@@ -508,14 +527,12 @@ function OcrUploader({ token, onUpload, onCancel }) {
     );
 }
 
-// --- OcrJobMonitor (UPDATED - Merged List + No Visual Gap) ---
-function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
+// --- OcrJobMonitor (UPDATED - Delete Button in Header) ---
+function OcrJobMonitor({ token }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedJobId, setExpandedJobId] = useState(null);
-    
-    const knownCompletedRef = useRef(new Set());
 
     const fetchJobs = useCallback(async () => {
         try {
@@ -525,20 +542,6 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
             if (response.ok) {
                 const data = await response.json();
                 setJobs(data);
-
-                let hasNewCompletion = false;
-                data.forEach(job => {
-                    if (job.status === 'complete' || job.status === 'failed') {
-                        if (!knownCompletedRef.current.has(job.id)) {
-                            knownCompletedRef.current.add(job.id);
-                            hasNewCompletion = true;
-                        }
-                    }
-                });
-
-                if (hasNewCompletion) {
-                    onJobComplete();
-                }
             } else {
                 setError('Échec de la récupération des jobs OCR.');
             }
@@ -547,19 +550,13 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         } finally {
             setIsLoading(false);
         }
-    }, [token, onJobComplete]);
+    }, [token]);
     
     useEffect(() => {
         fetchJobs();
-        const interval = setInterval(fetchJobs, 2000);
+        const interval = setInterval(fetchJobs, 2000); // Poll every 2 seconds
         return () => clearInterval(interval);
     }, [fetchJobs]);
-
-    useEffect(() => {
-        if (refreshTrigger > 0) {
-            fetchJobs();
-        }
-    }, [refreshTrigger, fetchJobs]);
 
     const toggleJobDetails = (jobId) => {
         setExpandedJobId(prev => (prev === jobId ? null : jobId));
@@ -594,43 +591,17 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         });
     };
 
-    // --- MERGED LIST LOGIC FOR VISUAL CONTINUITY ---
-    // We combine the real jobs list with the temporary "virtual" job.
-    // If the top job in 'jobs' matches the 'uploadingFile', we show the real one.
-    // If it doesn't, we show the virtual one.
-    let displayJobs = [...jobs];
-    
-    if (uploadingFile) {
-        // Check if the real job has appeared yet
-        const isRealJobPresent = jobs.length > 0 && jobs[0].file_name === uploadingFile.name;
-        
-        if (!isRealJobPresent) {
-            // Prepend virtual job
-            displayJobs.unshift({
-                id: 'temp-virtual-id', 
-                file_name: uploadingFile.name,
-                created_at: new Date().toISOString(),
-                status: 'processing',
-                progress: 0,
-                successes: [],
-                failures: []
-            });
-        }
-    }
-    // -----------------------------------------------
-
-    if (isLoading && !uploadingFile && jobs.length === 0) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
+    if (isLoading) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
     if (error) return <p className="error-message">{error}</p>;
 
     return (
         <div className="job-monitor">
             <h3>Suivi des Téléchargements de Passeports</h3>
-            
-            {displayJobs.length === 0 ? (
+            {jobs.length === 0 ? (
                 <p className="info-message">Aucun document n'a encore été téléchargé.</p>
             ) : (
                 <ul className="job-list">
-                    {displayJobs.map(job => (
+                    {jobs.map(job => (
                         <li key={job.id} className="job-item">
                             <div className="job-header">
                                 <div className="job-details">
@@ -641,24 +612,26 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                                     </small>
                                 </div>
                                 <div className="job-actions">
+                                     {/* Allow viewing results if job is done or failed */}
                                      {(job.status === 'complete' || job.status === 'failed') && (
                                         <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
                                             {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
                                         </button>
                                     )}
-                                    {/* Hide delete button for the virtual job */}
-                                    {job.id !== 'temp-virtual-id' && (
-                                        <button 
-                                            onClick={() => handleRemoveJob(job.id)} 
-                                            className="btn btn-danger"
-                                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
-                                        >
-                                            Supprimer
-                                        </button>
-                                    )}
+                                    
+                                    {/* --- FIX: DELETE BUTTON ALWAYS VISIBLE HERE --- */}
+                                    <button 
+                                        onClick={() => handleRemoveJob(job.id)} 
+                                        className="btn btn-danger"
+                                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
+                                    >
+                                        Supprimer
+                                    </button>
+                                    {/* --------------------------------------------- */}
                                 </div>
                             </div>
                             
+                            {/* PROGRESS BAR */}
                             <ProgressBar progress={job.progress} status={job.status} />
 
                             {expandedJobId === job.id && (
@@ -698,10 +671,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
     const [selectedIds, setSelectedIds] = useState(new Set());
-    
-    // --- NEW STATE ---
-    const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
-    const [uploadingFile, setUploadingFile] = useState(null); // Track active upload for UI
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -760,47 +729,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setSelectedIds(new Set());
         fetchData(); 
     };
-
-    // --- UPDATED: HANDLES BACKGROUND UPLOAD + OPTIMISTIC UI ---
-    const handleUpload = async (formData, fileObj) => {
-        // 1. Set Optimistic State
-        setUploadingFile(fileObj);
-        
-        // 2. Close Modal Immediately
-        setShowOcrUploader(false);
-        setSelectedIds(new Set());
-
-        // 3. Perform Upload in Background
-        try {
-            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
-                setUploadingFile(null); // Clear optimistic state on error
-            } else {
-                // Success: Trigger fetch
-                setRefreshJobsTrigger(prev => prev + 1);
-                
-                // Keep optimistic state for 2 seconds to allow overlap with real job fetching
-                setTimeout(() => {
-                    setUploadingFile(null);
-                }, 2000);
-            }
-        } catch (err) {
-            alert('Une erreur inattendue est survenue lors du téléchargement.');
-            setUploadingFile(null);
-        }
-    };
-    
-    // Callback for OcrJobMonitor to refresh main data table
-    const handleJobComplete = useCallback(() => {
-        fetchData();
-    }, [fetchData]);
 
     const handleCancel = () => {
         setEditingItem(null);
@@ -865,10 +793,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     };
 
     if (showOcrUploader) {
-        // Pass handleUpload instead of handleSave
         return <OcrUploader 
             token={token} 
-            onUpload={handleUpload} 
+            onUploadSuccess={handleSave} 
             onCancel={() => setShowOcrUploader(false)} 
         />
     }
@@ -882,14 +809,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
     return (
         <div>
-            {endpoint === 'passports' && (
-                <OcrJobMonitor 
-                    token={token} 
-                    refreshTrigger={refreshJobsTrigger}
-                    onJobComplete={handleJobComplete}
-                    uploadingFile={uploadingFile}
-                />
-            )}
+            {endpoint === 'passports' && <OcrJobMonitor token={token} />}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
@@ -988,6 +908,53 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     );
 }
 
+function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
+    const [formData, setFormData] = useState(item);
+    const [destinations, setDestinations] = useState([]);
+    const [error, setError] = useState('');
+    useEffect(() => {
+        const initialData = { ...item };
+        Object.entries(fields).forEach(([key, type]) => { if (type === 'datetime-local' && initialData[key]) { initialData[key] = new Date(initialData[key]).toISOString().slice(0, 16); } });
+        if (endpoint === 'passports' && !isCreating && item.voyages && item.voyages.length > 0) { initialData.destination = item.voyages[0].destination; }
+        setFormData(initialData);
+    }, [item, fields, endpoint, isCreating]);
+    
+    useEffect(() => {
+        if (endpoint === 'passports') {
+            const fetchDestinations = async () => {
+                try {
+                    const response = await fetch(`${API_URL}/destinations/`, { headers: { 'Authorization': `Bearer ${token}` } });
+                    if (response.ok) setDestinations(await response.json());
+                } catch (error) { console.error("Échec de la récupération des destinations:", error); }
+            };
+            fetchDestinations();
+        }
+    }, [endpoint, token]);
+
+    const handleChange = (e) => { const { name, value, type, checked } = e.target; setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value }); };
+    const handleSubmit = async (e) => {
+        e.preventDefault(); setError('');
+        let url = isCreating ? `${API_URL}/${endpoint}/` : `${API_URL}/${endpoint}/${item.id}`;
+        let method = isCreating ? 'POST' : 'PUT';
+        let body = { ...formData };
+        if (body.confidence_score === '') { body.confidence_score = null; }
+        if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
+        if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
+        if (endpoint === 'admin/users') {
+            body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
+        }
+        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
+        if (response.ok) { onSave(); } else { 
+            const errorData = await response.json(); 
+            setError(errorData.detail || "Échec de l'enregistrement de l'élément."); 
+        }
+    };
+    const formFields = { ...fields };
+    if (formFields.confidence_score) { delete formFields.confidence_score; }
+    if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
+    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
+}
+
 function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionLabel, onChange }) {
     const dataListId = `datalist-${name}-${Math.random()}`;
     return (
@@ -1008,223 +975,6 @@ function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionL
                     </option>
                 ))}
             </datalist>
-        </div>
-    );
-}
-
-// --- MISSING COMPONENTS RESTORED HERE ---
-
-function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
-    const [formData, setFormData] = useState(item);
-    const [error, setError] = useState('');
-
-    const handleChange = (e) => {
-        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-        setFormData({ ...formData, [e.target.name]: value });
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        const url = isCreating ? `${API_URL}/${endpoint}` : `${API_URL}/${endpoint}/${item.id}`;
-        const method = isCreating ? 'POST' : 'PUT';
-        
-        // Prepare payload - remove empty strings for optional fields if needed
-        const payload = { ...formData };
-        
-        // Special handling for passport creation via this form (manual entry)
-        // The endpoint expects schemas.PassportCreate which includes 'destination'
-        // but the 'passports/' endpoint handles it.
-        
-        try {
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                onSave();
-            } else {
-                const errData = await response.json();
-                setError(errData.detail || 'Une erreur est survenue.');
-            }
-        } catch (err) {
-            setError('Erreur de connexion au serveur.');
-        }
-    };
-
-    return (
-        <div className="form-container">
-            <h3>{isCreating ? 'Ajouter' : 'Modifier'}</h3>
-            {error && <p className="error-message">{error}</p>}
-            <form onSubmit={handleSubmit}>
-                {Object.keys(fields).map(field => {
-                    if (field === 'confidence_score' || field === 'uploaded_pages_count') return null; // Skip read-only fields
-                    if (!isCreating && field === 'password') return null; // Don't show password on edit usually
-                    
-                    const type = fields[field];
-                    
-                    return (
-                        <div className="form-group" key={field}>
-                            <label>{columnTranslations[field] || field}</label>
-                            {type === 'checkbox' ? (
-                                <input
-                                    type="checkbox"
-                                    name={field}
-                                    checked={formData[field] || false}
-                                    onChange={handleChange}
-                                    className="form-checkbox"
-                                />
-                            ) : (
-                                <input
-                                    type={type}
-                                    name={field}
-                                    value={formData[field] || ''}
-                                    onChange={handleChange}
-                                    className="form-input"
-                                    required={field !== 'delivery_date' && field !== 'password' && field !== 'destination'}
-                                />
-                            )}
-                        </div>
-                    );
-                })}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem' }}>
-                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
-                    <button type="submit" className="btn btn-primary">Enregistrer</button>
-                </div>
-            </form>
-        </div>
-    );
-}
-
-function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
-    const [exportFilters, setExportFilters] = useState({ destination: '', user_id: '', first_name: '', last_name: '' });
-    const [previewData, setPreviewData] = useState(null);
-    const [loadingPreview, setLoadingPreview] = useState(false);
-
-    // Determine which user ID to use for fetching destinations in the filter
-    // If admin selects a user, use that ID. If admin selects nothing, use nothing (all).
-    // If regular user, the backend handles it based on their token.
-    const effectiveUserId = user.role === 'admin' ? (exportFilters.user_id || null) : user.id;
-
-    const handleExport = async () => {
-        const query = new URLSearchParams(Object.fromEntries(Object.entries(exportFilters).filter(([, v]) => v)));
-        window.location.href = `${API_URL}/export/data?${query.toString()}&token=${token}`; // Token passed as query param is not ideal security but common for file downloads. Better: fetch blob.
-        // Correction: The backend export endpoint expects Bearer token header. 
-        // Browser navigation won't send headers. 
-        // We must use fetch + blob download.
-        
-        try {
-            const response = await fetch(`${API_URL}/export/data?${query.toString()}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = response.headers.get('Content-Disposition').split('filename=')[1] || 'export.csv';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            } else {
-                alert("Erreur lors de l'exportation.");
-            }
-        } catch (e) {
-            alert("Erreur réseau.");
-        }
-    };
-
-    const handlePreview = async () => {
-        setLoadingPreview(true);
-        const query = new URLSearchParams(Object.fromEntries(Object.entries(exportFilters).filter(([, v]) => v)));
-        // Re-use the passports endpoint for preview, it has the same filters mostly
-        // But wait, the export filter allows destination text search.
-        // The crud manager used destination_filter.
-        // Let's construct a query compatible with GET /passports/ 
-        
-        let previewQuery = {};
-        if (exportFilters.destination) previewQuery.destination_filter = exportFilters.destination;
-        if (exportFilters.user_id) previewQuery.user_filter = exportFilters.user_id;
-        if (exportFilters.first_name) previewQuery.user_filter = exportFilters.first_name; // This is kinda hacky as user_filter searches names too
-        
-        // Actually, the backend `export_data` logic is slightly different from `read_passports`.
-        // To show a true preview of *what will be exported*, we probably can't use `read_passports` perfectly
-        // without changing the backend. 
-        // Ideally, we'd have a `/passports/search` endpoint matching the export logic.
-        // For now, we will try to map it or just call export and parse CSV? No, that's heavy.
-        // Let's use `read_passports` and approximate.
-        
-        // Better approach: The user wants to export based on criteria. 
-        // Let's just show the data available in the "Passports" tab if they filter there.
-        // But here we are in a specific tools panel.
-        
-        // Let's stick to the requested feature: "Generate Report".
-        // We won't show a live table preview here to save complexity, unless requested.
-        // The prompt implies "preview functionality" was part of previous iterations. 
-        // I will reinstate a simple preview fetch.
-        
-        try {
-             // Reuse the export logic but maybe limit it? 
-             // Or just trust the user wants the file.
-             // Let's just simulate a "Count" check.
-             const response = await fetch(`${API_URL}/passports/?${query.toString()}`, {
-                 headers: { 'Authorization': `Bearer ${token}` }
-             });
-             if(response.ok) {
-                 const data = await response.json();
-                 setPreviewData(data.slice(0, 5)); // Show top 5
-             }
-        } catch(e) {
-            console.error(e);
-        } finally {
-            setLoadingPreview(false);
-        }
-    };
-
-    return (
-        <div>
-            <h2>Outils & Exportation</h2>
-            <div className="form-container" style={{ maxWidth: 'none', margin: '0' }}>
-                <h3>Générer un Rapport CSV</h3>
-                <div className="filter-bar mb-2">
-                    {user.role === 'admin' && (
-                        <ComboBoxFilter
-                            name="user_id"
-                            placeholder="Filtrer par Utilisateur"
-                            options={adminUsers}
-                            getOptionValue={(o) => o.id}
-                            getOptionLabel={(o) => `${o.first_name} ${o.last_name}`}
-                            onChange={(name, val) => setExportFilters(prev => ({ ...prev, [name]: val }))}
-                        />
-                    )}
-                    <ComboBoxFilter
-                        name="destination"
-                        placeholder="Filtrer par Destination"
-                        options={userDestinations.map(d => ({ destination: d }))} // Assuming string array
-                        getOptionValue={(o) => o.destination}
-                        getOptionLabel={(o) => o.destination}
-                        onChange={(name, val) => setExportFilters(prev => ({ ...prev, [name]: val }))}
-                    />
-                    <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <input type="text" placeholder="Prénom" className="form-input" onChange={e => setExportFilters(prev => ({ ...prev, first_name: e.target.value }))} />
-                    </div>
-                    <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <input type="text" placeholder="Nom" className="form-input" onChange={e => setExportFilters(prev => ({ ...prev, last_name: e.target.value }))} />
-                    </div>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={handlePreview} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Aperçu (Top 5)</button>
-                    <button onClick={handleExport} className="btn btn-primary">Télécharger le Rapport CSV</button>
-                </div>
-                {loadingPreview && <p className="mt-2">Chargement...</p>}
-                {previewData && <PreviewTable data={previewData} />}
-            </div>
         </div>
     );
 }
