@@ -404,7 +404,7 @@ function AccountEditor({ user, token, fetchUser }) {
         <label>{columnTranslations['uploaded_pages_count']}</label>
         <input 
             type="number" 
-            value={user.uploaded_pages_count} 
+            value={user.uploaded_pages_count || 0} 
             className="form-input" 
             readOnly 
             disabled 
@@ -540,10 +540,11 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                     onJobComplete();
                 }
             } else {
-                setError('Échec de la récupération des jobs OCR.');
+                // Fail silently to avoid UI flicker, just log
+                console.error('Échec de la récupération des jobs OCR.');
             }
         } catch (err) {
-            setError('Une erreur est survenue lors de la récupération des jobs.');
+            console.error('Une erreur est survenue lors de la récupération des jobs.', err);
         } finally {
             setIsLoading(false);
         }

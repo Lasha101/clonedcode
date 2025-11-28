@@ -105,9 +105,12 @@ async def run_ocr_extraction_task(
                 # Convert the live SQLAlchemy model to a Pydantic schema
                 created_passport_schema = schemas.Passport.model_validate(created_passport_model)
                 
-                # Add the Pydantic schema (serialized) to the success list
-                # We dump it to a dict so it can be stored in the JSON column
-                successes.append({"page_number": page_number, "data": created_passport_schema.model_dump()})
+                # --- CRITICAL FIX HERE ---
+                # Use model_dump(mode='json') to convert date objects to strings (ISO 8601).
+                # This prevents the "Object of type date is not JSON serializable" error.
+                serialized_data = created_passport_schema.model_dump(mode='json')
+                
+                successes.append({"page_number": page_number, "data": serialized_data})
 
             except ValidationError as e:
                 first_error = e.errors()[0]
