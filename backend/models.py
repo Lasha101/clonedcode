@@ -1,5 +1,7 @@
+# --------------- START OF FILE: models.py ---------------
+
 # /models.py
-from sqlalchemy import Boolean, Column, Integer, Float, String, Date, ForeignKey, Table, DateTime
+from sqlalchemy import Boolean, Column, Integer, Float, String, Date, ForeignKey, Table, DateTime, JSON
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -25,6 +27,8 @@ class User(Base):
 
     passports = relationship("Passport", back_populates="owner", cascade="all, delete-orphan")
     voyages = relationship("Voyage", back_populates="user", cascade="all, delete-orphan")
+    # Relation to OCR Jobs
+    ocr_jobs = relationship("OcrJob", back_populates="user", cascade="all, delete-orphan")
 
 class Passport(Base):
     __tablename__ = "passports"
@@ -32,10 +36,10 @@ class Passport(Base):
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     birth_date = Column(Date)
-    delivery_date = Column(Date, nullable=True) # <-- This was the change from last time
+    delivery_date = Column(Date, nullable=True) 
     expiration_date = Column(Date)
     nationality = Column(String, index=True)
-    passport_number = Column(String, index=True, nullable=False) # Removed unique=True
+    passport_number = Column(String, index=True, nullable=False) 
     confidence_score = Column(Float)
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="passports")
@@ -56,3 +60,24 @@ class Invitation(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
+
+# --- NEW TABLE FOR OCR JOBS (PERSISTENT) ---
+class OcrJob(Base):
+    __tablename__ = "ocr_jobs"
+    
+    id = Column(String, primary_key=True, index=True) # UUID
+    user_id = Column(Integer, ForeignKey("users.id"))
+    file_name = Column(String, nullable=False)
+    status = Column(String, default="processing") # processing, complete, failed
+    progress = Column(Integer, default=0) # 0 to 100
+    created_at = Column(DateTime)
+    finished_at = Column(DateTime, nullable=True)
+    
+    # JSON columns for storing lists of results
+    # SQLAlchemy handles serialization/deserialization automatically
+    successes = Column(JSON, default=list) 
+    failures = Column(JSON, default=list)
+
+    user = relationship("User", back_populates="ocr_jobs")
+
+# --------------- END OF FILE: models.py ---------------

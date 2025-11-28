@@ -1,10 +1,12 @@
+# --------------- START OF FILE: crud.py ---------------
+
 # /crud.py
 
 from sqlalchemy.orm import Session, joinedload, outerjoin
 import models, schemas, auth
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from fastapi import HTTPException
 from http import HTTPStatus
 
@@ -30,8 +32,6 @@ def get_users(db: Session, skip: int = 0, limit: int = 100, name_filter: Optiona
 def get_all_users_for_filtering(db: Session):
     # Return all users, including the admin, for filtering purposes
     return db.query(models.User).all()
-
-
 
 def create_user(db: Session, user: schemas.UserCreate, token: Optional[str] = None, role: str = "user"):
     # If a token is provided, validate it (for public registration)
@@ -286,9 +286,6 @@ def create_invitation(db: Session, email: str):
     db.refresh(db_invitation)
     return db_invitation
 
-
-
-
 def get_invitation_by_token(db: Session, token: str):
     return db.query(models.Invitation).filter(models.Invitation.token == token).first()
 
@@ -324,29 +321,11 @@ def get_destinations_by_user_id(db: Session, user_id: int) -> List[str]:
     destinations = [item[0] for item in query.all()]
     return destinations
 
-# --- MODIFIED FUNCTION FOR MULTI-DELETE ---
 def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int, role: str) -> int:
-    """
-    Deletes or disassociates multiple passports based on sharing.
-    - If a user (non-admin) deletes, they can only "delete" passports they OWN.
-    - If an admin deletes, they can "delete" any passport.
-    - "Delete" logic:
-        1. Find all users related to the passport (as owner OR via a voyage).
-        2. If the *only* related user is the one deleting it -> HARD DELETE.
-        3. If *other* users are related -> PRESERVE, but disassociate from the deleter:
-            - If deleter is owner, set owner_id = None.
-            - Remove passport from all of deleter's voyages.
-    """
-    
-    # 1. Get all passport objects the user is allowed to "delete".
     query = db.query(models.Passport).filter(models.Passport.id.in_(passport_ids))
-    
-    # Security Check: Non-admins can only "delete" passports they OWN.
     if role != "admin":
         query = query.filter(models.Passport.owner_id == user_id)
-    
     passports_to_process = query.all()
-    
     if not passports_to_process:
         return 0
 
@@ -354,37 +333,24 @@ def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int
     deleter_user_id = user_id
 
     for passport in passports_to_process:
-        # 2. Find all unique users related to this passport.
-        
-        # Get the owner
         owner_id = passport.owner_id
-        
-        # Get all users related via voyages
         voyage_user_ids = db.query(models.Voyage.user_id).join(
             models.voyage_passport_association
         ).filter(
             models.voyage_passport_association.c.passport_id == passport.id
         ).distinct().all()
         
-        # Create a set of all related user IDs
         related_user_ids = {u[0] for u in voyage_user_ids if u[0] is not None}
         if owner_id:
             related_user_ids.add(owner_id)
 
-        # 3. Check if any *other* users are related
         other_related_users = related_user_ids - {deleter_user_id}
 
         if len(other_related_users) == 0:
-            # Case A: Only the deleter is related. We can HARD DELETE.
             db.delete(passport)
         else:
-            # Case B: Other users are related. PRESERVE and DISASSOCIATE.
-            
-            # 1. If deleter is the owner, set owner to None (orphan it)
             if passport.owner_id == deleter_user_id:
                 passport.owner_id = None
-            
-            # 2. Remove passport from all of the deleter's voyages
             deleter_voyages = db.query(models.Voyage).filter(
                 models.Voyage.user_id == deleter_user_id
             ).join(
@@ -392,14 +358,71 @@ def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int
             ).filter(
                 models.voyage_passport_association.c.passport_id == passport.id
             ).all()
-            
             for voyage in deleter_voyages:
                 voyage.passports.remove(passport)
-        
         processed_count += 1
 
     db.commit()
-    
     return processed_count
-# --- END OF MODIFIED FUNCTION ---
 
+# --- NEW: CRUD for OCR Jobs (Persisted in DB) ---
+def create_ocr_job(db: Session, job_id: str, user_id: int, file_name: str):
+    new_job = models.OcrJob(
+        id=job_id,
+        user_id=user_id,
+        file_name=file_name,
+        status="processing",
+        progress=0, # Start at 0
+        created_at=datetime.now(),
+        successes=[],
+        failures=[]
+    )
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
+    return new_job
+
+def get_ocr_job(db: Session, job_id: str):
+    return db.query(models.OcrJob).filter(models.OcrJob.id == job_id).first()
+
+def get_user_ocr_jobs(db: Session, user_id: int):
+    # Return newest first
+    return db.query(models.OcrJob).filter(models.OcrJob.user_id == user_id).order_by(models.OcrJob.created_at.desc()).all()
+
+def update_ocr_job_progress(db: Session, job_id: str, progress: int):
+    job = get_ocr_job(db, job_id)
+    if job:
+        job.progress = progress
+        db.commit()
+        db.refresh(job)
+
+def update_ocr_job_complete(db: Session, job_id: str, successes: List[Dict], failures: List[Dict]):
+    job = get_ocr_job(db, job_id)
+    if job:
+        job.status = "complete" if not (len(successes) == 0 and len(failures) > 0) else "failed"
+        job.progress = 100
+        job.finished_at = datetime.now()
+        # Explicitly re-assign to trigger SQLAlchemy JSON detection
+        job.successes = list(successes)
+        job.failures = list(failures)
+        db.commit()
+        db.refresh(job)
+
+def update_ocr_job_failed(db: Session, job_id: str, error_detail: str):
+    job = get_ocr_job(db, job_id)
+    if job:
+        job.status = "failed"
+        job.progress = 100
+        job.finished_at = datetime.now()
+        job.failures = [{"page_number": 1, "detail": error_detail}]
+        db.commit()
+        db.refresh(job)
+
+def delete_ocr_job(db: Session, job_id: str):
+    job = get_ocr_job(db, job_id)
+    if job:
+        db.delete(job)
+        db.commit()
+    return job
+
+# --------------- END OF FILE: crud.py ---------------

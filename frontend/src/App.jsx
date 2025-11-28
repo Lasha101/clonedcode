@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// --------------- START OF FILE: frontend/src/App.jsx ---------------
 
-// const API_URL = 'http://127.0.0.1:8000';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // Use the build-time environment variable if it exists,
 // otherwise fall back to '/api' for local development.
@@ -64,7 +64,6 @@ const GlobalStyles = () => (
         .table thead th { background-color: #f8f9fa; font-weight: 600; }
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr:hover { background-color: #f1f3f5; }
-        /* Style for selected row */
         .table tbody tr.selected-row { background-color: rgba(42, 111, 219, 0.1); }
         .table th.checkbox-cell, .table td.checkbox-cell { width: 1%; text-align: center; }
         .filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
@@ -79,15 +78,12 @@ const GlobalStyles = () => (
         .job-monitor { background-color: var(--surface-color); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 2rem; }
         .job-monitor h3 { margin-top: 0; }
         .job-list { list-style-type: none; padding: 0; margin: 0; max-height: 400px; overflow-y: auto; }
-        .job-item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; }
+        .job-item { display: flex; flex-direction: column; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; gap: 0.5rem; }
         .job-item:last-child { margin-bottom: 0; }
+        .job-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
         .job-details { flex: 1; min-width: 200px; padding-right: 1rem; }
         .job-details strong { font-size: 1.1rem; }
-        .job-status { display: flex; align-items: center; gap: 0.5rem; }
-        .job-status-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; }
-        .job-status-processing { background-color: rgba(13, 202, 240, 0.1); color: var(--processing-color); }
-        .job-status-complete { background-color: rgba(25, 135, 84, 0.1); color: var(--success-color); }
-        .job-status-failed { background-color: rgba(220, 53, 69, 0.1); color: var(--danger-color); }
+        .job-actions { display: flex; align-items: center; gap: 0.5rem; }
         .job-results-toggle { background: none; border: none; color: var(--primary-color); cursor: pointer; font-weight: 600; padding: 0.5rem; }
         .job-results-details { width: 100%; padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-color); }
         .results-summary { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
@@ -97,6 +93,16 @@ const GlobalStyles = () => (
         .result-icon { margin-right: 1rem; }
         .result-success .result-icon { color: var(--success-color); }
         .result-failure .result-icon { color: var(--danger-color); }
+
+        /* --- PROGRESS BAR STYLES --- */
+        .progress-container { width: 100%; background-color: #e9ecef; border-radius: 8px; height: 1.5rem; overflow: hidden; margin-top: 0.5rem; position: relative; }
+        .progress-fill { height: 100%; transition: width 0.6s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: visible; }
+        .progress-processing { background-color: var(--processing-color); background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem; animation: progress-bar-stripes 1s linear infinite; }
+        .progress-complete { background-color: var(--success-color); }
+        .progress-failed { background-color: var(--danger-color); }
+        .progress-text { position: absolute; width: 100%; text-align: center; left: 0; top: 0; line-height: 1.5rem; color: #333; font-size: 0.85rem; font-weight: 600; text-shadow: 0 0 2px rgba(255,255,255,0.8); pointer-events: none; }
+        
+        @keyframes progress-bar-stripes { 0% { background-position: 1rem 0; } 100% { background-position: 0 0; } }
     `}</style>
 );
 
@@ -118,7 +124,7 @@ const columnTranslations = {
     expires_at: 'Expire Le',
     is_used: 'Utilisé',
     actions: 'Actions',
-    uploaded_pages_count: 'Pages Traitées' // <-- NEW TRANSLATION
+    uploaded_pages_count: 'Pages Traitées'
 };
 
 // --- HELPER COMPONENTS & ICONS ---
@@ -138,13 +144,39 @@ function PasswordInput({ value, onChange, name, placeholder, required = false })
 
 const SuccessIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>);
 const FailureIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>);
-const LoadingIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" style={{ animation: 'spin 1s linear infinite' }}>
-        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-        <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
-        <path d="M10.72,19.9a8,8,0,0,1-6.5-9.79A7.77,7.77,0,0,1,10.4,4.16a8,8,0,0,1,9.49,6.52A1.54,1.54,0,0,0,21.38,12h.13a1.37,1.37,0,0,0,1.38-1.54,11,11,0,1,0-12.7,12.7A1.54,1.54,0,0,0,12,21.34h0A1.47,1.47,0,0,0,10.72,19.9Z" />
-    </svg>
-);
+
+// --- ProgressBar Component ---
+const ProgressBar = ({ progress, status }) => {
+    let statusClass = 'progress-processing';
+    let label = `${progress}% - Traitement en cours...`;
+
+    if (status === 'complete') {
+        statusClass = 'progress-complete';
+        label = 'Terminé';
+    } else if (status === 'failed') {
+        statusClass = 'progress-failed';
+        label = 'Échoué';
+    } else if (progress === 0) {
+        label = "Démarrage du téléchargement..."; 
+    } else if (progress < 15) {
+        label = `${progress}% - Téléchargement...`;
+    } else if (progress < 75) {
+        label = `${progress}% - Analyse OCR...`;
+    } else {
+        label = `${progress}% - Écriture en Base de Données...`;
+    }
+
+    return (
+        <div className="progress-container">
+            <div 
+                className={`progress-fill ${statusClass}`} 
+                style={{ width: `${progress > 0 ? progress : 5}%` }}
+            >
+            </div>
+            <div className="progress-text">{label}</div>
+        </div>
+    );
+};
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -295,19 +327,15 @@ function Dashboard({ user, token, fetchUser }) {
     }, [fetchAdminData, fetchUserDestinations]);
 
     const renderTabContent = () => {
-        // --- THIS IS THE KEY CHANGE ---
-        // Admins get a user filter.
-        // Regular users get a destination filter.
         const passportFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
             : [{ 
-                name: 'destination_filter', // This now matches the new param in main.py
+                name: 'destination_filter',
                 placeholder: 'Filtrer par Destination', 
-                options: userSpecificDestinations.map(d => ({ destination: d })), // Use the fetched list
+                options: userSpecificDestinations.map(d => ({ destination: d })),
                 getOptionValue: (o) => o.destination,
                 getOptionLabel: (o) => o.destination
               }];
-        // --- END OF KEY CHANGE ---
 
         const voyageFilterConfig = user.role === 'admin' 
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
@@ -315,7 +343,6 @@ function Dashboard({ user, token, fetchUser }) {
             
         const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', delivery_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
         
-        // --- UPDATED USER FIELDS ---
         const userFields = { 
             first_name: 'text', 
             last_name: 'text', 
@@ -324,9 +351,8 @@ function Dashboard({ user, token, fetchUser }) {
             user_name: 'text', 
             password: 'password', 
             role: 'text', 
-            uploaded_pages_count: 'number' // <-- NEW FIELD
+            uploaded_pages_count: 'number'
         };
-        // --- END OF UPDATE ---
 
         switch (activeTab) {
             case 'account': return <AccountEditor user={user} token={token} fetchUser={fetchUser} />;
@@ -374,7 +400,6 @@ function AccountEditor({ user, token, fetchUser }) {
     };
     return (<div><h2>Modifier Mon Compte</h2>{message && <p className="success-message">{message}</p>}<form onSubmit={handleSubmit}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Numéro de téléphone</label><input type="text" name="phone_number" value={formData.phone_number} onChange={handleChange} className="form-input" /></div>
     
-    {/* --- THIS IS THE NEW READ-ONLY FIELD --- */}
     <div className="form-group">
         <label>{columnTranslations['uploaded_pages_count']}</label>
         <input 
@@ -386,15 +411,13 @@ function AccountEditor({ user, token, fetchUser }) {
             style={{ backgroundColor: '#f8f9fa' }}
         />
     </div>
-    {/* --- END OF NEW FIELD --- */}
 
     </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
 }
 
-// --- OcrUploader ---
-function OcrUploader({ token, onUploadSuccess, onCancel }) {
+// --- OcrUploader (Delegates upload to parent) ---
+function OcrUploader({ token, onUpload, onCancel }) {
     const [file, setFile] = useState(null);
-    const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState('');
     const [destination, setDestination] = useState('');
     const [destinations, setDestinations] = useState([]);
@@ -420,15 +443,12 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
         setError('');
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (!file) {
             setError('Veuillez sélectionner un fichier à télécharger.');
             return;
         }
-
-        setIsUploading(true);
-        setError('');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -436,24 +456,8 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
             formData.append('destination', destination);
         }
 
-        try {
-            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData,
-            });
-
-            if (response.ok) {
-                onUploadSuccess();
-            } else {
-                const data = await response.json();
-                setError(data.detail || "Échec du démarrage du job de téléchargement.");
-            }
-        } catch (err) {
-            setError('Une erreur inattendue est survenue. Veuillez réessayer.');
-        } finally {
-            setIsUploading(false);
-        }
+        // Pass file object so we can display name immediately
+        onUpload(formData, file);
     };
 
     return (
@@ -491,13 +495,12 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
                         accept="image/png, image/jpeg, image/jpg, application/pdf"
                         className="form-input"
                         required
-                        disabled={isUploading}
                     />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }} disabled={isUploading}>Annuler</button>
-                    <button type="submit" className="btn btn-primary" disabled={isUploading || !file}>
-                        {isUploading ? 'Démarrage...' : 'Télécharger et Extraire'}
+                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
+                    <button type="submit" className="btn btn-primary" disabled={!file}>
+                        Télécharger et Extraire
                     </button>
                 </div>
             </form>
@@ -505,14 +508,14 @@ function OcrUploader({ token, onUploadSuccess, onCancel }) {
     );
 }
 
-
-// --- OcrJobMonitor (MODIFIED) ---
-function OcrJobMonitor({ token }) {
+// --- OcrJobMonitor (UPDATED - Merged List + No Visual Gap) ---
+function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedJobId, setExpandedJobId] = useState(null);
-    // const [hiddenJobIds, setHiddenJobIds] = useState(new Set()); // <-- No longer needed
+    
+    const knownCompletedRef = useRef(new Set());
 
     const fetchJobs = useCallback(async () => {
         try {
@@ -522,6 +525,20 @@ function OcrJobMonitor({ token }) {
             if (response.ok) {
                 const data = await response.json();
                 setJobs(data);
+
+                let hasNewCompletion = false;
+                data.forEach(job => {
+                    if (job.status === 'complete' || job.status === 'failed') {
+                        if (!knownCompletedRef.current.has(job.id)) {
+                            knownCompletedRef.current.add(job.id);
+                            hasNewCompletion = true;
+                        }
+                    }
+                });
+
+                if (hasNewCompletion) {
+                    onJobComplete();
+                }
             } else {
                 setError('Échec de la récupération des jobs OCR.');
             }
@@ -530,28 +547,27 @@ function OcrJobMonitor({ token }) {
         } finally {
             setIsLoading(false);
         }
-    }, [token]);
+    }, [token, onJobComplete]);
     
     useEffect(() => {
-        // Fetch immediately on mount
         fetchJobs();
-        
-        // Set an interval to poll every 5 seconds.
-        const interval = setInterval(fetchJobs, 5000); 
-
-        // Cleanup interval on unmount
+        const interval = setInterval(fetchJobs, 2000);
         return () => clearInterval(interval);
     }, [fetchJobs]);
 
+    useEffect(() => {
+        if (refreshTrigger > 0) {
+            fetchJobs();
+        }
+    }, [refreshTrigger, fetchJobs]);
 
     const toggleJobDetails = (jobId) => {
         setExpandedJobId(prev => (prev === jobId ? null : jobId));
     };
 
-    // --- UPDATED HANDLER ---
-    // This function now calls the DELETE endpoint and removes the job from local state.
     const handleRemoveJob = async (jobIdToRemove) => {
-        setExpandedJobId(null); // Close the modal
+        setExpandedJobId(null);
+        if (!window.confirm("Voulez-vous vraiment supprimer ce job ?")) return;
         try {
             const response = await fetch(`${API_URL}/ocr/jobs/${jobIdToRemove}`, {
                 method: 'DELETE',
@@ -559,12 +575,10 @@ function OcrJobMonitor({ token }) {
             });
 
             if (response.ok) {
-                // Remove the job from the local state for immediate UI update
                 setJobs(prevJobs => prevJobs.filter(job => job.id !== jobIdToRemove));
             } else {
-                // Handle error (e.g., show a temporary error message)
                 console.error("Failed to delete job");
-                setError("Échec de la suppression du job."); // Show error in the monitor
+                setError("Échec de la suppression du job.");
             }
         } catch (err) {
             console.error("Error deleting job:", err);
@@ -580,49 +594,73 @@ function OcrJobMonitor({ token }) {
         });
     };
 
-    if (isLoading) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
+    // --- MERGED LIST LOGIC FOR VISUAL CONTINUITY ---
+    // We combine the real jobs list with the temporary "virtual" job.
+    // If the top job in 'jobs' matches the 'uploadingFile', we show the real one.
+    // If it doesn't, we show the virtual one.
+    let displayJobs = [...jobs];
+    
+    if (uploadingFile) {
+        // Check if the real job has appeared yet
+        const isRealJobPresent = jobs.length > 0 && jobs[0].file_name === uploadingFile.name;
+        
+        if (!isRealJobPresent) {
+            // Prepend virtual job
+            displayJobs.unshift({
+                id: 'temp-virtual-id', 
+                file_name: uploadingFile.name,
+                created_at: new Date().toISOString(),
+                status: 'processing',
+                progress: 0,
+                successes: [],
+                failures: []
+            });
+        }
+    }
+    // -----------------------------------------------
+
+    if (isLoading && !uploadingFile && jobs.length === 0) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
     if (error) return <p className="error-message">{error}</p>;
 
-    // We now render directly from the `jobs` state
     return (
         <div className="job-monitor">
             <h3>Suivi des Téléchargements de Passeports</h3>
-            {jobs.length === 0 ? (
+            
+            {displayJobs.length === 0 ? (
                 <p className="info-message">Aucun document n'a encore été téléchargé.</p>
             ) : (
                 <ul className="job-list">
-                    {jobs.map(job => (
+                    {displayJobs.map(job => (
                         <li key={job.id} className="job-item">
-                            <div className="job-details">
-                                <strong>{job.file_name}</strong>
-                                <br />
-                                <small style={{ color: 'var(--secondary-color)' }}>
-                                    {formatDate(job.created_at)}
-                                </small>
+                            <div className="job-header">
+                                <div className="job-details">
+                                    <strong>{job.file_name}</strong>
+                                    <br />
+                                    <small style={{ color: 'var(--secondary-color)' }}>
+                                        {formatDate(job.created_at)}
+                                    </small>
+                                </div>
+                                <div className="job-actions">
+                                     {(job.status === 'complete' || job.status === 'failed') && (
+                                        <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
+                                            {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
+                                        </button>
+                                    )}
+                                    {/* Hide delete button for the virtual job */}
+                                    {job.id !== 'temp-virtual-id' && (
+                                        <button 
+                                            onClick={() => handleRemoveJob(job.id)} 
+                                            className="btn btn-danger"
+                                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
+                                        >
+                                            Supprimer
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                            <div className="job-status">
-                                {job.status === 'processing' && (
-                                    <span className="job-status-badge job-status-processing">
-                                        <LoadingIcon /> Traitement...
-                                    </span>
-                                )}
-                                {job.status === 'complete' && (
-                                    <span className="job-status-badge job-status-complete">
-                                        Terminé
-                                    </span>
-                                )}
-                                {job.status === 'failed' && (
-                                    <span className="job-status-badge job-status-failed">
-                                        Échoué
-                                    </span>
-                                )}
-                            </div>
-                            {job.status !== 'processing' && (
-                                <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
-                                    {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
-                                </button>
-                            )}
                             
+                            <ProgressBar progress={job.progress} status={job.status} />
+
                             {expandedJobId === job.id && (
                                 <div className="job-results-details">
                                     <p className="results-summary">
@@ -642,14 +680,6 @@ function OcrJobMonitor({ token }) {
                                             </li>
                                         ))}
                                     </ul>
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                                        <button 
-                                            onClick={() => handleRemoveJob(job.id)} 
-                                            className="btn btn-danger"
-                                        >
-                                            Supprimer
-                                        </button>
-                                    </div>
                                 </div>
                             )}
                         </li>
@@ -660,7 +690,6 @@ function OcrJobMonitor({ token }) {
     );
 }
 
-
 function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [items, setItems] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
@@ -668,9 +697,11 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [filters, setFilters] = useState({});
     const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
-    
-    // --- NEW STATE FOR MULTI-DELETE ---
     const [selectedIds, setSelectedIds] = useState(new Set());
+    
+    // --- NEW STATE ---
+    const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
+    const [uploadingFile, setUploadingFile] = useState(null); // Track active upload for UI
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -710,7 +741,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             if (response.ok) setItems(await response.json());
             else console.error("Échec de la récupération des données pour", endpoint);
         } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
-        // Clear selection on new data fetch
         setSelectedIds(new Set());
     }, [endpoint, token, filters]);
     
@@ -727,29 +757,69 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         setEditingItem(null); 
         setIsCreating(false); 
         setShowOcrUploader(false); 
-        setSelectedIds(new Set()); // Clear selection
+        setSelectedIds(new Set());
         fetchData(); 
     };
+
+    // --- UPDATED: HANDLES BACKGROUND UPLOAD + OPTIMISTIC UI ---
+    const handleUpload = async (formData, fileObj) => {
+        // 1. Set Optimistic State
+        setUploadingFile(fileObj);
+        
+        // 2. Close Modal Immediately
+        setShowOcrUploader(false);
+        setSelectedIds(new Set());
+
+        // 3. Perform Upload in Background
+        try {
+            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
+                setUploadingFile(null); // Clear optimistic state on error
+            } else {
+                // Success: Trigger fetch
+                setRefreshJobsTrigger(prev => prev + 1);
+                
+                // Keep optimistic state for 2 seconds to allow overlap with real job fetching
+                setTimeout(() => {
+                    setUploadingFile(null);
+                }, 2000);
+            }
+        } catch (err) {
+            alert('Une erreur inattendue est survenue lors du téléchargement.');
+            setUploadingFile(null);
+        }
+    };
+    
+    // Callback for OcrJobMonitor to refresh main data table
+    const handleJobComplete = useCallback(() => {
+        fetchData();
+    }, [fetchData]);
 
     const handleCancel = () => {
         setEditingItem(null);
         setIsCreating(false);
         setShowOcrUploader(false);
-        setSelectedIds(new Set()); // Clear selection
+        setSelectedIds(new Set());
     }
 
     const startCreating = () => {
         let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
         if (endpoint === 'admin/users') {
             newItem.role = 'user';
-            newItem.uploaded_pages_count = 0; // Default for new user
+            newItem.uploaded_pages_count = 0;
         }
         if (endpoint === 'admin/invitations') newItem = { email: '' };
         setEditingItem(newItem);
         setIsCreating(true);
     };
 
-    // --- NEW HANDLERS FOR MULTI-DELETE ---
     const handleToggleSelect = (id) => {
         setSelectedIds(prev => {
             const newSet = new Set(prev);
@@ -783,7 +853,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     body: JSON.stringify(payload)
                 });
                 if (response.ok) {
-                    fetchData(); // Refreshes data and clears selection
+                    fetchData();
                 } else {
                     const errorData = await response.json();
                     alert(`Échec de la suppression multiple: ${errorData.detail}`);
@@ -793,13 +863,12 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             }
         }
     };
-    // --- END OF NEW HANDLERS ---
-
 
     if (showOcrUploader) {
+        // Pass handleUpload instead of handleSave
         return <OcrUploader 
             token={token} 
-            onUploadSuccess={handleSave} 
+            onUpload={handleUpload} 
             onCancel={() => setShowOcrUploader(false)} 
         />
     }
@@ -813,12 +882,18 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
 
     return (
         <div>
-            {endpoint === 'passports' && <OcrJobMonitor token={token} />}
+            {endpoint === 'passports' && (
+                <OcrJobMonitor 
+                    token={token} 
+                    refreshTrigger={refreshJobsTrigger}
+                    onJobComplete={handleJobComplete}
+                    uploadingFile={uploadingFile}
+                />
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    {/* --- NEW MULTI-DELETE BUTTON --- */}
                     {endpoint === 'passports' && selectedIds.size > 0 && (
                         <button onClick={handleMultiDelete} className="btn btn-danger">
                             Supprimer la sélection ({selectedIds.size})
@@ -862,7 +937,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                 <table className="table">
                     <thead>
                         <tr>
-                            {/* --- NEW CHECKBOX HEADER --- */}
                             {endpoint === 'passports' && (
                                 <th className="checkbox-cell">
                                     <input
@@ -883,7 +957,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     <tbody>
                         {items.map(item => (
                             <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
-                                {/* --- NEW CHECKBOX CELL --- */}
                                 {endpoint === 'passports' && (
                                     <td className="checkbox-cell">
                                         <input
@@ -902,181 +975,14 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                                 })}
                                 <td>
                                     <button onClick={() => setEditingItem(item)} className="btn" style={{ backgroundColor: 'var(--warning-color)', color: 'black', marginRight: '0.5rem' }}>Modifier</button>
-                                    
-                                    {/* --- THIS IS THE CRUCIAL CHANGE --- */}
-                                    {/* The individual delete button is now conditional */}
                                     {endpoint !== 'passports' && (
                                         <button onClick={() => handleDelete(item.id)} className="btn btn-danger">Supprimer</button>
                                     )}
-                                    {/* --- END OF CHANGE --- */}
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-            </div>
-        </div>
-    );
-}
-
-// --- (Rest of the file is unchanged) ---
-
-function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
-    const [formData, setFormData] = useState(item);
-    const [destinations, setDestinations] = useState([]);
-    const [error, setError] = useState('');
-    useEffect(() => {
-        const initialData = { ...item };
-        Object.entries(fields).forEach(([key, type]) => { if (type === 'datetime-local' && initialData[key]) { initialData[key] = new Date(initialData[key]).toISOString().slice(0, 16); } });
-        if (endpoint === 'passports' && !isCreating && item.voyages && item.voyages.length > 0) { initialData.destination = item.voyages[0].destination; }
-        setFormData(initialData);
-    }, [item, fields, endpoint, isCreating]);
-    
-    useEffect(() => {
-        if (endpoint === 'passports') {
-            const fetchDestinations = async () => {
-                try {
-                    const response = await fetch(`${API_URL}/destinations/`, { headers: { 'Authorization': `Bearer ${token}` } });
-                    if (response.ok) setDestinations(await response.json());
-                } catch (error) { console.error("Échec de la récupération des destinations:", error); }
-            };
-            fetchDestinations();
-        }
-    }, [endpoint, token]);
-
-    const handleChange = (e) => { const { name, value, type, checked } = e.target; setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value }); };
-    const handleSubmit = async (e) => {
-        e.preventDefault(); setError('');
-        let url = isCreating ? `${API_URL}/${endpoint}/` : `${API_URL}/${endpoint}/${item.id}`;
-        let method = isCreating ? 'POST' : 'PUT';
-        let body = { ...formData };
-        if (body.confidence_score === '') { body.confidence_score = null; }
-        if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
-        if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
-        if (endpoint === 'admin/users') {
-            body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
-        }
-        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
-        if (response.ok) { onSave(); } else { 
-            const errorData = await response.json(); 
-            setError(errorData.detail || "Échec de l'enregistrement de l'élément."); 
-        }
-    };
-    const formFields = { ...fields };
-    if (formFields.confidence_score) { delete formFields.confidence_score; }
-    if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
-    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
-}
-
-function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
-    const [filters, setFilters] = useState({ user_id: '', destination: '' });
-    const [previewData, setPreviewData] = useState(null);
-    const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteMsg, setInviteMsg] = useState('');
-    const [invitationLink, setInvitationLink] = useState('');
-
-    const handleFilterChange = (name, value) => { 
-        setFilters(prev => ({ ...prev, [name]: value })); 
-        setPreviewData(null); 
-    };
-
-    const getFilteredData = async () => {
-        const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
-        if (user.role !== 'admin') {
-            delete activeFilters.user_id;
-        }
-        const query = new URLSearchParams(activeFilters).toString();
-        try {
-            const response = await fetch(`${API_URL}/export/data?${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (!response.ok) { 
-                const err = await response.json();
-                alert(`Échec de la récupération des données: ${err.detail}`); 
-                return null; 
-            }
-            return response;
-        } catch (error) { alert('Une erreur est survenue lors de la récupération des données.'); return null; }
-    };
-
-    const handlePreview = async () => {
-        const response = await getFilteredData();
-        if (response) {
-            const csvText = await response.text();
-            if (!csvText) { setPreviewData([]); return; }
-            const rows = csvText.trim().split('\n');
-            const headers = rows[0].split(',');
-            const data = rows.slice(1).map(row => { const values = row.split(','); return headers.reduce((obj, h, i) => ({ ...obj, [h]: values[i] }), {}); });
-            setPreviewData(data);
-        }
-    };
-    
-    const handleExport = async () => {
-        const response = await getFilteredData();
-        if (response) {
-            const blob = await response.blob();
-            const contentDisposition = response.headers.get('content-disposition');
-            const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'passports_export.csv';
-            const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-            setPreviewData(null);
-        }
-    };
-
-    const handleInvite = async () => {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) { setInviteMsg('Veuillez entrer une adresse email valide.'); return; }
-        setInviteMsg('Génération du lien...'); setInvitationLink('');
-        try {
-            const response = await fetch(`${API_URL}/admin/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ email: inviteEmail }), });
-            const data = await response.json();
-            if (response.ok) { const link = `${window.location.origin}/register/${data.token}`; setInvitationLink(link); setInviteMsg('Lien généré. Copiez-le et envoyez-le à l\'utilisateur.'); } else { setInviteMsg(data.detail || 'Échec de la création de l\'invitation.'); }
-        } catch (error) { setInviteMsg('Une erreur est survenue.'); }
-    };
-
-    return (
-        <div>
-            <h2>Outils & Exportation</h2>
-            {user.role === 'admin' && (
-                <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem', marginBottom: '2rem' }}>
-                    <h3>Inviter un nouvel utilisateur</h3>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <input type="email" placeholder="Entrez l'email de l'utilisateur" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="form-input" style={{ flexGrow: 1 }} />
-                        <button onClick={handleInvite} className="btn btn-primary" style={{ backgroundColor: 'var(--warning-color)', color: 'black' }}>Générer le lien</button>
-                    </div>
-                    {inviteMsg && <p className="info-message mt-1">{inviteMsg}</p>}
-                    {invitationLink && (
-                        <div className="mt-1">
-                            <input type="text" readOnly value={invitationLink} className="form-input" onClick={e => e.target.select()} />
-                        </div>
-                    )}
-                </div>
-            )}
-            <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}>
-                <h3>Filtrer et Exporter les Données des Passeports</h3>
-                <div className="filter-bar mb-1">
-                    {user.role === 'admin' && (
-                        <ComboBoxFilter 
-                            name="user_id" 
-                            placeholder="Filtrer par Utilisateur" 
-                            options={adminUsers} 
-                            getOptionValue={(o) => o.id} 
-                            getOptionLabel={(o) => `${o.first_name} ${o.last_name} (${o.user_name})`} 
-                            onChange={handleFilterChange} 
-                        />
-                    )}
-                     <ComboBoxFilter 
-                        name="destination" 
-                        placeholder="Filtrer par Destination" 
-                        options={userDestinations.map(d => ({ destination: d }))} 
-                        getOptionValue={(o) => o.destination} 
-                        getOptionLabel={(o) => o.destination} 
-                        onChange={handleFilterChange} 
-                    />
-                </div>
-                <button onClick={handlePreview} className="btn btn-primary">Aperçu des Données</button>
-                {previewData && (
-                    <>
-                        <PreviewTable data={previewData} />
-                        <button onClick={handleExport} className="btn mt-1" style={{ backgroundColor: 'var(--success-color)', color: 'white' }}>Télécharger en CSV</button>
-                    </>
-                )}
             </div>
         </div>
     );
@@ -1111,3 +1017,5 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
+
+// --------------- END OF FILE: frontend/src/App.jsx ---------------

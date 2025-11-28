@@ -1,5 +1,7 @@
+# --------------- START OF FILE: schemas.py ---------------
+
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from datetime import date, datetime
 
 class VoyageBase(BaseModel):
@@ -29,7 +31,7 @@ class PassportCreate(PassportBase):
 
 class Passport(PassportBase):
     id: int
-    owner_id: Optional[int] = None  # <-- THIS IS THE FIX
+    owner_id: Optional[int] = None
     voyages: List[Voyage] = []
     class Config:
         from_attributes = True
@@ -50,16 +52,12 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
     password: Optional[str] = None
-    # --- NEW FIELD ---
     uploaded_pages_count: Optional[int] = None
-    # --- END OF NEW FIELD ---
 
 class User(UserBase):
     id: int
     role: str
-    # --- NEW FIELD ---
     uploaded_pages_count: int
-    # --- END OF NEW FIELD ---
     passports: List["Passport"] = []
     voyages: List[Voyage] = []
     class Config:
@@ -89,26 +87,20 @@ class InvitationUpdate(BaseModel):
 
 # --- NEW/UPDATED OCR SCHEMAS ---
 
-class OcrJobFailure(BaseModel):
-    page_number: int
-    detail: str
-
-class OcrJobSuccess(BaseModel):
-    page_number: int
-    data: Passport # <-- Changed from Any to Passport
-
+# We use Dict[str, Any] for successes/failures to map easily to JSON DB columns
 class OcrJob(BaseModel):
     id: str
     user_id: int
     file_name: str
-    status: str # e.g., "processing", "complete", "failed"
+    status: str 
+    progress: int # <-- NEW: For Seamless Progress Bar
     created_at: datetime
     finished_at: Optional[datetime] = None
-    successes: List[OcrJobSuccess] = []
-    failures: List[OcrJobFailure] = []
+    successes: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
     
     class Config:
-        from_attributes = True # for in-memory dict
+        from_attributes = True
 
 # --- NEW SCHEMA FOR MULTI-DELETE ---
 class PassportDeleteMultiple(BaseModel):
@@ -117,3 +109,4 @@ class PassportDeleteMultiple(BaseModel):
 # This line is needed at the end of the file to resolve the forward reference
 User.model_rebuild()
 
+# --------------- END OF FILE: schemas.py ---------------
