@@ -13,7 +13,7 @@ import io
 from datetime import datetime, timezone
 import crud, models, schemas, auth
 from database import SessionLocal, engine, get_db
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, List, Any
 import ocr_service
 import logging 
 import uuid 
