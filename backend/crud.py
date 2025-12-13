@@ -269,7 +269,7 @@ def filter_data(db: Session, destination: Optional[str], user_id: Optional[int],
 
         data_list.append({
             "id": passport.id, "first_name": passport.first_name, "last_name": passport.last_name,
-            "birth_date": passport.birth_date, "delivery_date": passport.delivery_date,
+            "birth_date": passport.birth_date, # delivery_date removed
             "expiration_date": passport.expiration_date, "nationality": passport.nationality,
             "passport_number": passport.passport_number, "owner_id": passport.owner_id,
             "destination": dest_str

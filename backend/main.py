@@ -1,5 +1,3 @@
-# --------------- START OF FILE: main.py ---------------
-
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
@@ -218,11 +216,14 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 @app.put("/users/me", response_model=schemas.User)
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
-    # User cannot update their own page count or credits
-    if user_update.uploaded_pages_count is not None:
-        user_update.uploaded_pages_count = None
-    if user_update.page_credits is not None:
-        user_update.page_credits = None
+    # Standard users cannot update their own page count or credits
+    # Admin users CAN update their own page count or credits
+    if current_user.role != "admin":
+        if user_update.uploaded_pages_count is not None:
+            user_update.uploaded_pages_count = None
+        if user_update.page_credits is not None:
+            user_update.page_credits = None
+    
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
 # --- Admin User Management Routes ---

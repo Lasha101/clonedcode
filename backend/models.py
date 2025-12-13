@@ -38,13 +38,16 @@ class Passport(Base):
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     birth_date = Column(Date)
-    delivery_date = Column(Date, nullable=True) 
+    # delivery_date removed
     expiration_date = Column(Date)
     nationality = Column(String, index=True)
     passport_number = Column(String, index=True, nullable=False) 
     confidence_score = Column(Float)
     owner_id = Column(Integer, ForeignKey("users.id"))
+    
     owner = relationship("User", back_populates="passports")
+    
+    # Points to Voyage.passports
     voyages = relationship("Voyage", secondary=voyage_passport_association, back_populates="passports")
 
 class Voyage(Base):
@@ -52,7 +55,10 @@ class Voyage(Base):
     id = Column(Integer, primary_key=True, index=True)
     destination = Column(String, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"))
+    
     user = relationship("User", back_populates="voyages")
+    
+    # FIXED: Points to Passport.voyages (previously incorrectly pointed to "passports")
     passports = relationship("Passport", secondary=voyage_passport_association, back_populates="voyages")
 
 class Invitation(Base):

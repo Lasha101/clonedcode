@@ -1,3 +1,5 @@
+// --------------- START OF FILE: ../frontend/src/App.jsx ---------------
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // Use the build-time environment variable if it exists,
@@ -121,7 +123,7 @@ const columnTranslations = {
     first_name: 'Prénom',
     last_name: 'Nom de famille',
     birth_date: 'Date de Naissance',
-    delivery_date: 'Date de Délivrance',
+    // delivery_date removed
     expiration_date: "Date d'Expiration",
     nationality: 'Nationalité',
     passport_number: 'Numéro de Passeport',
@@ -354,7 +356,8 @@ function Dashboard({ user, token, fetchUser }) {
             ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
             : null;
             
-        const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', delivery_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
+        // delivery_date removed from fields below
+        const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
         
         const userFields = { 
             first_name: 'text', 
@@ -447,7 +450,7 @@ function AccountEditor({ user, token, fetchUser }) {
     );
 }
 
-// --- OcrUploader (UPDATED: Drag and Drop + Explicit Click Choice) ---
+// --- OcrUploader (UPDATED: Drag and Drop with Linux/Brave Fixes) ---
 function OcrUploader({ token, onUpload, onCancel }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState('');
@@ -569,46 +572,24 @@ function OcrUploader({ token, onUpload, onCancel }) {
                 <div className="form-group">
                     <label>Document de Passeport (Image ou PDF)</label>
                     
-                    {/* HIDDEN INPUT (Triggered by both DropZone and Explicit Button) */}
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept="image/png, image/jpeg, image/jpg, application/pdf"
-                        style={{ display: 'none' }}
-                    />
-
-                    {/* OPTION 1: DRAG AND DROP ZONE */}
                     <div 
                         className={`drop-zone ${isDragging ? 'active' : ''}`}
                         onDragEnter={handleDragEnter}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={triggerFileInput} // Keep clicking here working for convenience
-                        title="Cliquez ou déposez un fichier ici"
+                        onClick={triggerFileInput}
                     >
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="image/png, image/jpeg, image/jpg, application/pdf"
+                            style={{ display: 'none' }}
+                        />
                         <UploadIcon />
-                        <p>{file ? `Fichier sélectionné : ${file.name}` : "Glissez-déposez votre document ici"}</p>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--primary-color)', marginTop: '0.5rem' }}>
-                            (Vous pouvez aussi cliquer ici)
-                        </p>
+                        <p>{file ? `Fichier sélectionné : ${file.name}` : "Glissez-déposez votre document ici ou cliquez pour parcourir"}</p>
                     </div>
-
-                    {/* OPTION 2: EXPLICIT BUTTON (To ensure "Choice" exists if DropZone click fails on some OS) */}
-                    <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                        <span style={{ color: 'var(--secondary-color)', fontSize: '0.9rem' }}>— OU —</span>
-                        <button 
-                            type="button" 
-                            className="btn" 
-                            onClick={triggerFileInput}
-                            style={{ backgroundColor: '#e9ecef', color: '#333', border: '1px solid #ced4da', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            Choisir un fichier depuis l'ordinateur
-                        </button>
-                    </div>
-
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
@@ -755,11 +736,11 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                                      )}
                                      {job.id !== 'temp-virtual-id' && (
                                          <button 
-                                             onClick={() => handleRemoveJob(job.id)} 
-                                             className="btn btn-danger"
-                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
+                                              onClick={() => handleRemoveJob(job.id)} 
+                                              className="btn btn-danger"
+                                              style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
                                          >
-                                             Supprimer
+                                              Supprimer
                                          </button>
                                      )}
                                 </div>
@@ -1278,3 +1259,5 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
+
+//  --------------- END OF FILE: ../frontend/src/App.jsx ---------------

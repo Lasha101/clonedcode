@@ -1,3 +1,5 @@
+# --------------- START OF FILE: ocr_service.py ---------------
+
 import os
 import json
 import logging
@@ -85,11 +87,11 @@ def _parse_date_from_mrz(date_str: str) -> Optional[str]:
 def _parse_passport_text(line_to_extract: str) -> Dict[str, Optional[str]]:
     """
     Extracts passport data from a single, concatenated MRZ string.
-    (This function is unchanged from your original)
     """
     data = {
         "first_name": None, "last_name": None, "passport_number": None,
-        "birth_date": None, "delivery_date": None, # delivery_date is not in the MRZ
+        "birth_date": None, 
+        # delivery_date removed
         "expiration_date": None, "nationality": None,
     }
     s = line_to_extract.replace(' ', '').replace('«', '<')
@@ -373,3 +375,5 @@ async def extract_data_page_by_page(file_content: bytes, content_type: str) -> L
             await _delete_gcs_blob(GCS_INPUT_BUCKET, gcs_input_filename)
 
     return all_results
+
+# --------------- END OF FILE: ocr_service.py ---------------
