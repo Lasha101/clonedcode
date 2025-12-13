@@ -21,10 +21,12 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user")
     
-    # --- NEW FIELD ---
+    # --- EXISTING FIELD ---
     uploaded_pages_count = Column(Integer, default=0, nullable=False)
-    # --- END OF NEW FIELD ---
-
+    
+    # --- NEW FIELD (CREDITS) ---
+    page_credits = Column(Integer, default=0, nullable=False)
+    
     passports = relationship("Passport", back_populates="owner", cascade="all, delete-orphan")
     voyages = relationship("Voyage", back_populates="user", cascade="all, delete-orphan")
     # Relation to OCR Jobs

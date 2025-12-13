@@ -42,10 +42,11 @@ def create_user(db: Session, user: schemas.UserCreate, token: Optional[str] = No
         db.delete(invitation)
 
     hashed_password = auth.get_password_hash(user.password)
+    # model_dump includes page_credits if present in schema
     db_user = models.User(
         **user.model_dump(exclude={"password"}),
         hashed_password=hashed_password,
-        role=role # Assign role
+        role=role 
     )
     db.add(db_user)
     db.commit()
@@ -365,7 +366,7 @@ def delete_multiple_passports(db: Session, passport_ids: List[int], user_id: int
     db.commit()
     return processed_count
 
-# --- NEW: CRUD for OCR Jobs (Persisted in DB) ---
+# --- CRUD for OCR Jobs (Persisted in DB) ---
 def create_ocr_job(db: Session, job_id: str, user_id: int, file_name: str):
     new_job = models.OcrJob(
         id=job_id,

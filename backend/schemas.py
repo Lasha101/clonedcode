@@ -45,6 +45,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    page_credits: Optional[int] = 0 # Default to 0 credits on creation
 
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
@@ -53,11 +54,13 @@ class UserUpdate(BaseModel):
     phone_number: Optional[str] = None
     password: Optional[str] = None
     uploaded_pages_count: Optional[int] = None
+    page_credits: Optional[int] = None # Allow admin to update credits
 
 class User(UserBase):
     id: int
     role: str
     uploaded_pages_count: int
+    page_credits: int # Include in response
     passports: List["Passport"] = []
     voyages: List[Voyage] = []
     class Config:
@@ -85,15 +88,14 @@ class InvitationUpdate(BaseModel):
     expires_at: Optional[datetime] = None
     is_used: Optional[bool] = None
 
-# --- NEW/UPDATED OCR SCHEMAS ---
+# --- OCR SCHEMAS ---
 
-# We use Dict[str, Any] for successes/failures to map easily to JSON DB columns
 class OcrJob(BaseModel):
     id: str
     user_id: int
     file_name: str
     status: str 
-    progress: int # <-- NEW: For Seamless Progress Bar
+    progress: int
     created_at: datetime
     finished_at: Optional[datetime] = None
     successes: List[Dict[str, Any]] = []
@@ -102,7 +104,7 @@ class OcrJob(BaseModel):
     class Config:
         from_attributes = True
 
-# --- NEW SCHEMA FOR MULTI-DELETE ---
+# --- SCHEMA FOR MULTI-DELETE ---
 class PassportDeleteMultiple(BaseModel):
     passport_ids: List[int]
 

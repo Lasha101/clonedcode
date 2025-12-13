@@ -127,16 +127,18 @@ async def run_ocr_extraction_task(
             current_progress = 80 + int((i / total_pages) * 15)
             crud.update_ocr_job_progress(db, job_id, current_progress)
     
-    # --- Increment User's Page Count ---
+    # --- Increment User's Page Count & Decrement Page Credits ---
     page_count = len(extraction_results)
     if page_count > 0:
         try:
             user = db.query(models.User).filter(models.User.id == user_id).first()
             if user:
                 user.uploaded_pages_count += page_count
+                # Decrement credits (allow negative)
+                user.page_credits -= page_count
                 db.commit()
         except Exception as e:
-            logger.error(f"Failed to increment page count: {e}")
+            logger.error(f"Failed to update page count/credits: {e}")
             db.rollback()
     
     # 4. Finalize Job in DB
@@ -164,7 +166,8 @@ async def lifespan(app: FastAPI):
                 email="admin@example.com",
                 phone_number="1234567890",
                 user_name="admin",
-                password=ADMIN_PASSWORD
+                password=ADMIN_PASSWORD,
+                page_credits=1000 # Give admin plenty of credits by default
             )
             crud.create_user(db=db, user=admin, role="admin", token=None)
     db.close()
@@ -206,7 +209,7 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
 def register_user(user: schemas.UserCreate, token: str = Query(...), db: Session = Depends(get_db)):
     created_user = crud.create_user(db=db, user=user, token=token, role="user")
     if not created_user:
-         raise HTTPException(status_code=400, detail="Jeton d'inscription invalide ou expiré.")
+          raise HTTPException(status_code=400, detail="Jeton d'inscription invalide ou expiré.")
     return created_user
 
 @app.get("/users/me", response_model=schemas.User)
@@ -215,9 +218,11 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 @app.put("/users/me", response_model=schemas.User)
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
-    # User cannot update their own page count
+    # User cannot update their own page count or credits
     if user_update.uploaded_pages_count is not None:
         user_update.uploaded_pages_count = None
+    if user_update.page_credits is not None:
+        user_update.page_credits = None
     return crud.update_user(db=db, user_id=current_user.id, user_update=user_update)
 
 # --- Admin User Management Routes ---
@@ -241,7 +246,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 
 @app.put("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
 def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
-    # Admin can update page count
+    # Admin can update page count and credits
     db_user = crud.update_user(db=db, user_id=user_id, user_update=user_update)
     if db_user is None:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
@@ -271,7 +276,10 @@ async def upload_and_extract_passport(
     db: Session = Depends(get_db), # We use the request session to CREATE the job
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    
+    # Check for sufficient credits
+    if current_user.page_credits <= 0:
+        raise HTTPException(status_code=403, detail="Crédits insuffisants. Veuillez contacter l'administrateur.")
+
     file_content = await file.read()
     if not file_content:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")

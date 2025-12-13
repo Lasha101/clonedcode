@@ -1,5 +1,3 @@
-// --------------- START OF FILE: frontend/src/App.jsx ---------------
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // Use the build-time environment variable if it exists,
@@ -51,7 +49,7 @@ const GlobalStyles = () => (
         .info-message { background-color: #eef2f7; color: #334d6e; padding: 1rem; border-radius: 8px; }
         .dashboard-layout { display: grid; grid-template-columns: 250px 1fr; gap: 2rem; }
         .dashboard-nav { background-color: var(--surface-color); padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); align-self: start; }
-        .dashboard-nav h3 { margin-top: 0; font-size: 1.25rem; }
+        .dashboard-nav h3 { margin-top: 0; font-size: 1.25rem; margin-bottom: 0.5rem; }
         .nav-menu { display: flex; flex-direction: column; gap: 0.5rem; }
         .nav-button { text-align: left; padding: 0.75rem 1rem; border: none; background-color: transparent; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 500; width: 100%; transition: background-color 0.2s, color 0.2s; }
         .nav-button:hover { background-color: #f1f3f5; }
@@ -103,6 +101,19 @@ const GlobalStyles = () => (
         .progress-text { position: absolute; width: 100%; text-align: center; left: 0; top: 0; line-height: 1.5rem; color: #333; font-size: 0.85rem; font-weight: 600; text-shadow: 0 0 2px rgba(255,255,255,0.8); pointer-events: none; }
         
         @keyframes progress-bar-stripes { 0% { background-position: 1rem 0; } 100% { background-position: 0 0; } }
+
+        /* --- NEW: CREDIT & DRAG-AND-DROP STYLES --- */
+        .credit-badge { background-color: var(--primary-color); color: white; padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.85rem; margin-bottom: 1rem; display: inline-block; font-weight: 500; }
+        .drop-zone { border: 2px dashed var(--border-color); border-radius: 8px; padding: 3rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background-color: #f8f9fa; margin-bottom: 1.5rem; position: relative; }
+        .drop-zone:hover { border-color: var(--primary-color); background-color: #f1f3f5; }
+        .drop-zone.active { border-color: var(--primary-color); background-color: rgba(42, 111, 219, 0.05); transform: scale(1.01); box-shadow: 0 4px 12px rgba(42, 111, 219, 0.1); }
+        
+        /* THIS IS THE CRITICAL FIX FOR LINUX/UBUNTU DRAG AND DROP */
+        /* It ensures the text/icons don't capture the mouse events, so the parent div always gets the drop */
+        .drop-zone * { pointer-events: none; }
+        
+        .drop-zone p { margin: 0; color: var(--secondary-color); font-weight: 500; }
+        .drop-zone svg { width: 48px; height: 48px; color: var(--secondary-color); margin-bottom: 1rem; }
     `}</style>
 );
 
@@ -124,12 +135,14 @@ const columnTranslations = {
     expires_at: 'Expire Le',
     is_used: 'Utilisé',
     actions: 'Actions',
-    uploaded_pages_count: 'Pages Traitées'
+    uploaded_pages_count: 'Pages Traitées',
+    page_credits: 'Crédits Pages' // NEW
 };
 
 // --- HELPER COMPONENTS & ICONS ---
 const EyeIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>);
 const EyeOffIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>);
+const UploadIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>);
 function PasswordInput({ value, onChange, name, placeholder, required = false }) {
     const [showPassword, setShowPassword] = useState(false);
     return (
@@ -351,7 +364,8 @@ function Dashboard({ user, token, fetchUser }) {
             user_name: 'text', 
             password: 'password', 
             role: 'text', 
-            uploaded_pages_count: 'number'
+            uploaded_pages_count: 'number',
+            page_credits: 'number' // NEW FIELD
         };
 
         switch (activeTab) {
@@ -368,6 +382,9 @@ function Dashboard({ user, token, fetchUser }) {
         <div className="dashboard-layout">
             <nav className="dashboard-nav">
                 <h3>Bienvenue, {user.first_name}!</h3>
+                <div className="credit-display">
+                    <span className="credit-badge">Crédits restants : {user.page_credits} pages</span>
+                </div>
                 <div className="nav-menu">
                     <button onClick={() => setActiveTab('account')} className={`nav-button ${activeTab === 'account' ? 'active' : ''}`}>Mon Compte</button>
                     <button onClick={() => setActiveTab('passports')} className={`nav-button ${activeTab === 'passports' ? 'active' : ''}`}>Passeports</button>
@@ -398,29 +415,46 @@ function AccountEditor({ user, token, fetchUser }) {
         const response = await fetch(`${API_URL}/users/me`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) });
         if (response.ok) { setMessage('Compte mis à jour avec succès !'); fetchUser(); } else { setMessage('Échec de la mise à jour du compte.'); }
     };
-    return (<div><h2>Modifier Mon Compte</h2>{message && <p className="success-message">{message}</p>}<form onSubmit={handleSubmit}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div><div className="form-group"><label>Numéro de téléphone</label><input type="text" name="phone_number" value={formData.phone_number} onChange={handleChange} className="form-input" /></div>
     
-    <div className="form-group">
-        <label>{columnTranslations['uploaded_pages_count']}</label>
-        <input 
-            type="number" 
-            value={user.uploaded_pages_count || 0} 
-            className="form-input" 
-            readOnly 
-            disabled 
-            style={{ backgroundColor: '#f8f9fa' }}
-        />
-    </div>
+    // --- SYNTAX FIX APPLIED HERE ---
+    return (
+        <div>
+            <h2>Modifier Mon Compte</h2>
+            {message && <p className="success-message">{message}</p>}
+            
+            <form onSubmit={handleSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div>
+                    <div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div>
+                    <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div>
+                    <div className="form-group"><label>Numéro de téléphone</label><input type="text" name="phone_number" value={formData.phone_number} onChange={handleChange} className="form-input" /></div>
+                    
+                    <div className="form-group">
+                        <label>{columnTranslations['uploaded_pages_count']}</label>
+                        <input type="number" value={user.uploaded_pages_count || 0} className="form-input" readOnly disabled style={{ backgroundColor: '#f8f9fa' }} />
+                    </div>
+                    
+                    <div className="form-group">
+                        <label>{columnTranslations['page_credits']}</label>
+                        <input type="number" value={user.page_credits || 0} className="form-input" readOnly disabled style={{ backgroundColor: '#f8f9fa' }} />
+                    </div>
 
-    </div><div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div><button type="submit" className="btn btn-primary">Enregistrer les modifications</button></form></div>);
+                </div>
+                <div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div>
+                <button type="submit" className="btn btn-primary">Enregistrer les modifications</button>
+            </form>
+        </div>
+    );
 }
 
-// --- OcrUploader (Delegates upload to parent) ---
+// --- OcrUploader (UPDATED: Drag and Drop + Explicit Click Choice) ---
 function OcrUploader({ token, onUpload, onCancel }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState('');
     const [destination, setDestination] = useState('');
     const [destinations, setDestinations] = useState([]);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         const fetchDestinations = async () => {
@@ -439,8 +473,54 @@ function OcrUploader({ token, onUpload, onCancel }) {
     }, [token]);
 
     const handleFileChange = (e) => {
-        setFile(e.target.files[0]);
-        setError('');
+        if (e.target.files && e.target.files.length > 0) {
+            setFile(e.target.files[0]);
+            setError('');
+        }
+    };
+
+    // --- LINUX DRAG FIX: Explicitly handle DragEnter ---
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // --- LINUX DRAG FIX: Explicitly set dropEffect ---
+        e.dataTransfer.dropEffect = 'copy';
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const droppedFile = e.dataTransfer.files[0];
+            const fileType = droppedFile.type;
+            if (fileType === 'application/pdf' || fileType.startsWith('image/')) {
+                setFile(droppedFile);
+                setError('');
+            } else {
+                setError('Type de fichier non supporté. Veuillez télécharger une image ou un PDF.');
+            }
+        }
+    };
+
+    const triggerFileInput = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
     };
 
     const handleSubmit = (e) => {
@@ -456,7 +536,6 @@ function OcrUploader({ token, onUpload, onCancel }) {
             formData.append('destination', destination);
         }
 
-        // Pass file object so we can display name immediately
         onUpload(formData, file);
     };
 
@@ -489,14 +568,49 @@ function OcrUploader({ token, onUpload, onCancel }) {
 
                 <div className="form-group">
                     <label>Document de Passeport (Image ou PDF)</label>
+                    
+                    {/* HIDDEN INPUT (Triggered by both DropZone and Explicit Button) */}
                     <input
                         type="file"
+                        ref={fileInputRef}
                         onChange={handleFileChange}
                         accept="image/png, image/jpeg, image/jpg, application/pdf"
-                        className="form-input"
-                        required
+                        style={{ display: 'none' }}
                     />
+
+                    {/* OPTION 1: DRAG AND DROP ZONE */}
+                    <div 
+                        className={`drop-zone ${isDragging ? 'active' : ''}`}
+                        onDragEnter={handleDragEnter}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={triggerFileInput} // Keep clicking here working for convenience
+                        title="Cliquez ou déposez un fichier ici"
+                    >
+                        <UploadIcon />
+                        <p>{file ? `Fichier sélectionné : ${file.name}` : "Glissez-déposez votre document ici"}</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--primary-color)', marginTop: '0.5rem' }}>
+                            (Vous pouvez aussi cliquer ici)
+                        </p>
+                    </div>
+
+                    {/* OPTION 2: EXPLICIT BUTTON (To ensure "Choice" exists if DropZone click fails on some OS) */}
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                        <span style={{ color: 'var(--secondary-color)', fontSize: '0.9rem' }}>— OU —</span>
+                        <button 
+                            type="button" 
+                            className="btn" 
+                            onClick={triggerFileInput}
+                            style={{ backgroundColor: '#e9ecef', color: '#333', border: '1px solid #ced4da', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                            Choisir un fichier depuis l'ordinateur
+                        </button>
+                    </div>
+
                 </div>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
                     <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
                     <button type="submit" className="btn btn-primary" disabled={!file}>
@@ -508,7 +622,7 @@ function OcrUploader({ token, onUpload, onCancel }) {
     );
 }
 
-// --- OcrJobMonitor (UPDATED - Merged List + No Visual Gap) ---
+// --- OcrJobMonitor (UNCHANGED) ---
 function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -540,7 +654,6 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                     onJobComplete();
                 }
             } else {
-                // Fail silently to avoid UI flicker, just log
                 console.error('Échec de la récupération des jobs OCR.');
             }
         } catch (err) {
@@ -595,18 +708,12 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         });
     };
 
-    // --- MERGED LIST LOGIC FOR VISUAL CONTINUITY ---
-    // We combine the real jobs list with the temporary "virtual" job.
-    // If the top job in 'jobs' matches the 'uploadingFile', we show the real one.
-    // If it doesn't, we show the virtual one.
     let displayJobs = [...jobs];
     
     if (uploadingFile) {
-        // Check if the real job has appeared yet
         const isRealJobPresent = jobs.length > 0 && jobs[0].file_name === uploadingFile.name;
         
         if (!isRealJobPresent) {
-            // Prepend virtual job
             displayJobs.unshift({
                 id: 'temp-virtual-id', 
                 file_name: uploadingFile.name,
@@ -618,7 +725,6 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
             });
         }
     }
-    // -----------------------------------------------
 
     if (isLoading && !uploadingFile && jobs.length === 0) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
     if (error) return <p className="error-message">{error}</p>;
@@ -646,17 +752,16 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                                         <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
                                             {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
                                         </button>
-                                    )}
-                                    {/* Hide delete button for the virtual job */}
-                                    {job.id !== 'temp-virtual-id' && (
-                                        <button 
-                                            onClick={() => handleRemoveJob(job.id)} 
-                                            className="btn btn-danger"
-                                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
-                                        >
-                                            Supprimer
-                                        </button>
-                                    )}
+                                     )}
+                                     {job.id !== 'temp-virtual-id' && (
+                                         <button 
+                                             onClick={() => handleRemoveJob(job.id)} 
+                                             className="btn btn-danger"
+                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
+                                         >
+                                             Supprimer
+                                         </button>
+                                     )}
                                 </div>
                             </div>
                             
@@ -700,9 +805,8 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
     const [selectedIds, setSelectedIds] = useState(new Set());
     
-    // --- NEW STATE ---
     const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
-    const [uploadingFile, setUploadingFile] = useState(null); // Track active upload for UI
+    const [uploadingFile, setUploadingFile] = useState(null);
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -762,16 +866,11 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         fetchData(); 
     };
 
-    // --- UPDATED: HANDLES BACKGROUND UPLOAD + OPTIMISTIC UI ---
     const handleUpload = async (formData, fileObj) => {
-        // 1. Set Optimistic State
         setUploadingFile(fileObj);
-        
-        // 2. Close Modal Immediately
         setShowOcrUploader(false);
         setSelectedIds(new Set());
 
-        // 3. Perform Upload in Background
         try {
             const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
                 method: 'POST',
@@ -782,12 +881,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             if (!response.ok) {
                 const data = await response.json();
                 alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
-                setUploadingFile(null); // Clear optimistic state on error
+                setUploadingFile(null);
             } else {
-                // Success: Trigger fetch
                 setRefreshJobsTrigger(prev => prev + 1);
-                
-                // Keep optimistic state for 2 seconds to allow overlap with real job fetching
                 setTimeout(() => {
                     setUploadingFile(null);
                 }, 2000);
@@ -798,7 +894,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         }
     };
     
-    // Callback for OcrJobMonitor to refresh main data table
     const handleJobComplete = useCallback(() => {
         fetchData();
     }, [fetchData]);
@@ -815,6 +910,7 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         if (endpoint === 'admin/users') {
             newItem.role = 'user';
             newItem.uploaded_pages_count = 0;
+            newItem.page_credits = 0; // Default credits
         }
         if (endpoint === 'admin/invitations') newItem = { email: '' };
         setEditingItem(newItem);
@@ -866,7 +962,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     };
 
     if (showOcrUploader) {
-        // Pass handleUpload instead of handleSave
         return <OcrUploader 
             token={token} 
             onUpload={handleUpload} 
@@ -989,7 +1084,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     );
 }
 
-// --- MISSING COMPONENT RESTORED BELOW ---
 function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
     const [formData, setFormData] = useState(item);
     const [destinations, setDestinations] = useState([]);
@@ -1022,9 +1116,13 @@ function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token 
         if (body.confidence_score === '') { body.confidence_score = null; }
         if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
         if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
+        
         if (endpoint === 'admin/users') {
             body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
+            // Ensure page_credits is sent as an integer
+            body.page_credits = parseInt(body.page_credits, 10) || 0;
         }
+        
         const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
         if (response.ok) { onSave(); } else { 
             const errorData = await response.json(); 
@@ -1034,7 +1132,7 @@ function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token 
     const formFields = { ...fields };
     if (formFields.confidence_score) { delete formFields.confidence_score; }
     if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
-    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
+    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count' && key !== 'page_credits'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
 }
 
 function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
@@ -1180,5 +1278,3 @@ function PreviewTable({ data }) {
     const headers = Object.keys(data[0]);
     return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
-
-// --------------- END OF FILE: frontend/src/App.jsx ---------------
