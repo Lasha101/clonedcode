@@ -1,5 +1,3 @@
-# --------------- START OF FILE: crud.py ---------------
-
 # /crud.py
 
 from sqlalchemy.orm import Session, joinedload, outerjoin
@@ -17,8 +15,8 @@ def get_user_by_username(db: Session, username: str):
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 def get_users(db: Session, skip: int = 0, limit: int = 100, name_filter: Optional[str] = None):
-    # Exclude the admin user from the list of manageable users
-    query = db.query(models.User).filter(models.User.user_name != "admin")
+    # --- MODIFIED: REMOVED THE FILTER THAT HID ADMIN ---
+    query = db.query(models.User)
     if name_filter:
         search = f"%{name_filter}%"
         query = query.filter(
@@ -426,4 +424,3 @@ def delete_ocr_job(db: Session, job_id: str):
         db.commit()
     return job
 
-# --------------- END OF FILE: crud.py ---------------

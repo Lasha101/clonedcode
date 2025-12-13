@@ -409,17 +409,52 @@ function Dashboard({ user, token, fetchUser }) {
 
 // --- DASHBOARD SUB-COMPONENTS ---
 function AccountEditor({ user, token, fetchUser }) {
-    const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', phone_number: '', password: '' });
+    // --- UPDATED STATE TO INCLUDE CREDITS/PAGE COUNT ---
+    const [formData, setFormData] = useState({ 
+        first_name: '', 
+        last_name: '', 
+        email: '', 
+        phone_number: '', 
+        password: '',
+        uploaded_pages_count: 0,
+        page_credits: 0
+    });
+    
     const [message, setMessage] = useState('');
-    useEffect(() => { if (user) setFormData({ first_name: user.first_name, last_name: user.last_name, email: user.email, phone_number: user.phone_number, password: '' }); }, [user]);
+
+    useEffect(() => { 
+        if (user) {
+            setFormData({ 
+                first_name: user.first_name, 
+                last_name: user.last_name, 
+                email: user.email, 
+                phone_number: user.phone_number, 
+                password: '',
+                uploaded_pages_count: user.uploaded_pages_count,
+                page_credits: user.page_credits
+            }); 
+        }
+    }, [user]);
+
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    
     const handleSubmit = async (e) => {
-        e.preventDefault(); setMessage(''); const payload = { ...formData }; if (!payload.password) delete payload.password;
+        e.preventDefault(); 
+        setMessage(''); 
+        const payload = { ...formData }; 
+        if (!payload.password) delete payload.password;
+        
+        // Ensure numbers are numbers if admin is editing them
+        if (user.role === 'admin') {
+            payload.uploaded_pages_count = parseInt(payload.uploaded_pages_count, 10);
+            payload.page_credits = parseInt(payload.page_credits, 10);
+        }
+
         const response = await fetch(`${API_URL}/users/me`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) });
         if (response.ok) { setMessage('Compte mis à jour avec succès !'); fetchUser(); } else { setMessage('Échec de la mise à jour du compte.'); }
     };
     
-    // --- SYNTAX FIX APPLIED HERE ---
+    // --- UPDATED: INPUTS ARE EDITABLE IF ADMIN ---
     return (
         <div>
             <h2>Modifier Mon Compte</h2>
@@ -434,12 +469,30 @@ function AccountEditor({ user, token, fetchUser }) {
                     
                     <div className="form-group">
                         <label>{columnTranslations['uploaded_pages_count']}</label>
-                        <input type="number" value={user.uploaded_pages_count || 0} className="form-input" readOnly disabled style={{ backgroundColor: '#f8f9fa' }} />
+                        <input 
+                            type="number" 
+                            name="uploaded_pages_count"
+                            value={formData.uploaded_pages_count} 
+                            onChange={handleChange}
+                            className="form-input" 
+                            readOnly={user.role !== 'admin'} 
+                            disabled={user.role !== 'admin'} 
+                            style={{ backgroundColor: user.role !== 'admin' ? '#f8f9fa' : 'white' }} 
+                        />
                     </div>
                     
                     <div className="form-group">
                         <label>{columnTranslations['page_credits']}</label>
-                        <input type="number" value={user.page_credits || 0} className="form-input" readOnly disabled style={{ backgroundColor: '#f8f9fa' }} />
+                        <input 
+                            type="number" 
+                            name="page_credits"
+                            value={formData.page_credits} 
+                            onChange={handleChange}
+                            className="form-input" 
+                            readOnly={user.role !== 'admin'} 
+                            disabled={user.role !== 'admin'} 
+                            style={{ backgroundColor: user.role !== 'admin' ? '#f8f9fa' : 'white' }} 
+                        />
                     </div>
 
                 </div>

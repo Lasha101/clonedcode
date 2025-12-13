@@ -216,9 +216,9 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_active_us
 
 @app.put("/users/me", response_model=schemas.User)
 def update_user_me(user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
-    # Standard users cannot update their own page count or credits
-    # Admin users CAN update their own page count or credits
+    # --- MODIFIED: ALLOW ADMIN TO UPDATE OWN CREDITS ---
     if current_user.role != "admin":
+        # Non-admin users cannot update their own page count or credits
         if user_update.uploaded_pages_count is not None:
             user_update.uploaded_pages_count = None
         if user_update.page_credits is not None:
@@ -519,5 +519,3 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
 
-
-# --------------- END OF FILE: main.py ---------------
