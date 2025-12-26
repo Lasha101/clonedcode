@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 // otherwise fall back to '/api' for local development.
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-// --- STYLES COMPONENT (Modern & Cosy Update) ---
+// --- STYLES COMPONENT ---
 const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -16,7 +16,7 @@ const GlobalStyles = () => (
             --primary-color: #4f46e5; /* Indigo-600 */
             --primary-hover: #4338ca; /* Indigo-700 */
             --secondary-color: #6b7280; /* Gray-500 */
-            --background-color: #f3f4f6; /* Gray-100 (Softer background) */
+            --background-color: #f3f4f6; /* Gray-100 */
             --surface-color: #ffffff;
             --text-color: #1f2937; /* Gray-800 */
             --border-color: #e5e7eb; /* Gray-200 */
@@ -46,7 +46,7 @@ const GlobalStyles = () => (
 
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 
-        /* HEADER: Glassmorphism feel */
+        /* HEADER */
         .app-header { 
             display: flex; 
             justify-content: space-between; 
@@ -70,7 +70,7 @@ const GlobalStyles = () => (
             letter-spacing: -0.025em;
         }
 
-        /* BUTTONS: Soft & Tactile */
+        /* BUTTONS */
         .btn { 
             padding: 0.6rem 1.2rem; 
             border: none; 
@@ -102,7 +102,7 @@ const GlobalStyles = () => (
         .btn-danger { background-color: var(--surface-color); color: var(--danger-color); border: 1px solid var(--border-color); }
         .btn-danger:hover { background-color: #fef2f2; border-color: var(--danger-color); }
 
-        /* FORMS: Clean & Focus states */
+        /* FORMS */
         .form-container { 
             background-color: var(--surface-color); 
             padding: 2.5rem; 
@@ -195,7 +195,7 @@ const GlobalStyles = () => (
         }
         .dashboard-content h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.5rem; color: #111827; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
 
-        /* TABLES: Modern & Clean */
+        /* TABLES */
         .table-container { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: white; }
         .table { width: 100%; border-collapse: separate; border-spacing: 0; }
         .table th, .table td { padding: 1rem 1.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
@@ -234,7 +234,7 @@ const GlobalStyles = () => (
         .drop-zone * { pointer-events: none; }
         .drop-zone svg { width: 48px; height: 48px; color: #94a3b8; margin-bottom: 1rem; }
 
-        /* LANDING PAGE (Centered) */
+        /* LANDING PAGE */
         .landing-container { display: flex; justify-content: center; align-items: center; min-height: 80vh; animation: fadeIn 0.6s ease-out; }
         .landing-auth { width: 100%; max-width: 450px; }
         .landing-auth .form-container { width: 100%; margin: 0; border: none; box-shadow: var(--shadow-lg); }
@@ -406,7 +406,6 @@ function Login({ setToken, fetchUser }) {
     return (
         <div>
             <div className="landing-container">
-                {/* CENTERED AUTH FORM */}
                 <div className="landing-auth">
                     <div className="form-container">
                         <h2>Connexion</h2>
@@ -427,8 +426,6 @@ function Login({ setToken, fetchUser }) {
                     </div>
                 </div>
             </div>
-
-            {/* MANDATORY FOOTER */}
             <footer className="legal-footer">
                 <div className="legal-links">
                     <a href="#">Mentions Légales</a>
@@ -471,7 +468,6 @@ function RegistrationPage({ registrationToken }) {
 }
 
 function Dashboard({ user, token, fetchUser }) {
-    // DEFAULT VIEW IS PASSPORTS
     const [activeTab, setActiveTab] = useState('passports');
     const [filterableUsers, setFilterableUsers] = useState([]);
     const [userSpecificDestinations, setUserSpecificDestinations] = useState([]);
@@ -522,7 +518,7 @@ function Dashboard({ user, token, fetchUser }) {
             password: 'password', 
             role: 'text', 
             uploaded_pages_count: 'number',
-            page_credits: 'number' // NEW FIELD
+            page_credits: 'number' 
         };
 
         const invitationFields = { email: 'email', token: 'text', expires_at: 'datetime-local', is_used: 'checkbox' };
@@ -558,11 +554,9 @@ function Dashboard({ user, token, fetchUser }) {
                 </div>
                 <div className="nav-menu">
                     <button onClick={() => setActiveTab('passports')} className={`nav-button ${activeTab === 'passports' ? 'active' : ''}`}>Passeports</button>
-                    
                     {user.role === 'admin' && (
                         <button onClick={() => setActiveTab('admin_manage')} className={`nav-button ${activeTab === 'admin_manage' ? 'active' : ''}`}>Administration</button>
                     )}
-
                     <button onClick={() => setActiveTab('account')} className={`nav-button ${activeTab === 'account' ? 'active' : ''}`}>Mon Compte</button>
                 </div>
             </nav>
@@ -571,11 +565,9 @@ function Dashboard({ user, token, fetchUser }) {
     );
 }
 
-// --- NEW COMPONENT: PASSPORTS PAGE (Combines Export, Tools, Upload, and List) ---
 function PassportsPage({ token, user, adminUsers, userDestinations, fields, filterConfig }) {
     return (
         <div>
-            {/* Export & Tools Section (Merged at top) */}
             <div className="tools-section" style={{ marginBottom: '2rem' }}>
                 <ToolsAndExportPanel 
                     token={token} 
@@ -584,8 +576,6 @@ function PassportsPage({ token, user, adminUsers, userDestinations, fields, filt
                     userDestinations={userDestinations} 
                 />
             </div>
-            
-            {/* The CRUD Manager handles the List and the integrated Upload */}
             <CrudManager 
                 title="Mes Passeports" 
                 endpoint="passports" 
@@ -598,22 +588,17 @@ function PassportsPage({ token, user, adminUsers, userDestinations, fields, filt
     );
 }
 
-// --- NEW COMPONENT: ADMIN MANAGEMENT PAGE (Combines Users & Invitations) ---
 function AdminManagementPage({ token, user, userFields, invitationFields }) {
     return (
         <div>
              <CrudManager title="Gérer les Utilisateurs" endpoint="admin/users" token={token} user={user} fields={userFields} />
-             
              <div style={{ margin: '3rem 0', borderTop: '2px dashed #e5e7eb' }}></div>
-             
              <CrudManager title="Gérer les Invitations" endpoint="admin/invitations" token={token} user={user} fields={invitationFields} />
         </div>
     );
 }
 
-// --- DASHBOARD SUB-COMPONENTS ---
 function AccountEditor({ user, token, fetchUser }) {
-    // --- UPDATED STATE TO INCLUDE CREDITS/PAGE COUNT ---
     const [formData, setFormData] = useState({ 
         first_name: '', 
         last_name: '', 
@@ -623,7 +608,6 @@ function AccountEditor({ user, token, fetchUser }) {
         uploaded_pages_count: 0,
         page_credits: 0
     });
-    
     const [message, setMessage] = useState('');
 
     useEffect(() => { 
@@ -647,58 +631,32 @@ function AccountEditor({ user, token, fetchUser }) {
         setMessage(''); 
         const payload = { ...formData }; 
         if (!payload.password) delete payload.password;
-        
-        // Ensure numbers are numbers if admin is editing them
         if (user.role === 'admin') {
             payload.uploaded_pages_count = parseInt(payload.uploaded_pages_count, 10);
             payload.page_credits = parseInt(payload.page_credits, 10);
         }
-
         const response = await fetch(`${API_URL}/users/me`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) });
         if (response.ok) { setMessage('Compte mis à jour avec succès !'); fetchUser(); } else { setMessage('Échec de la mise à jour du compte.'); }
     };
     
-    // --- UPDATED: INPUTS ARE EDITABLE IF ADMIN ---
     return (
         <div>
             <h2>Modifier Mon Compte</h2>
             {message && <p className="success-message">{message}</p>}
-            
             <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                     <div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div>
                     <div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div>
                     <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div>
                     <div className="form-group"><label>Numéro de téléphone</label><input type="text" name="phone_number" value={formData.phone_number} onChange={handleChange} className="form-input" /></div>
-                    
                     <div className="form-group">
                         <label>{columnTranslations['uploaded_pages_count']}</label>
-                        <input 
-                            type="number" 
-                            name="uploaded_pages_count"
-                            value={formData.uploaded_pages_count} 
-                            onChange={handleChange}
-                            className="form-input" 
-                            readOnly={user.role !== 'admin'} 
-                            disabled={user.role !== 'admin'} 
-                            style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} 
-                        />
+                        <input type="number" name="uploaded_pages_count" value={formData.uploaded_pages_count} onChange={handleChange} className="form-input" readOnly={user.role !== 'admin'} disabled={user.role !== 'admin'} style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} />
                     </div>
-                    
                     <div className="form-group">
                         <label>{columnTranslations['page_credits']}</label>
-                        <input 
-                            type="number" 
-                            name="page_credits"
-                            value={formData.page_credits} 
-                            onChange={handleChange}
-                            className="form-input" 
-                            readOnly={user.role !== 'admin'} 
-                            disabled={user.role !== 'admin'} 
-                            style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} 
-                        />
+                        <input type="number" name="page_credits" value={formData.page_credits} onChange={handleChange} className="form-input" readOnly={user.role !== 'admin'} disabled={user.role !== 'admin'} style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} />
                     </div>
-
                 </div>
                 <div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div>
                 <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>Enregistrer les modifications</button>
@@ -707,7 +665,6 @@ function AccountEditor({ user, token, fetchUser }) {
     );
 }
 
-// --- OcrUploader (UPDATED: Drag and Drop with Linux/Brave Fixes AND Integrated UI) ---
 function OcrUploader({ token, onUpload }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState('');
@@ -719,173 +676,81 @@ function OcrUploader({ token, onUpload }) {
     useEffect(() => {
         const fetchDestinations = async () => {
             try {
-                const response = await fetch(`${API_URL}/destinations/`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.ok) {
-                    setDestinations(await response.json());
-                }
-            } catch (error) {
-                console.error("Échec de la récupération des destinations:", error);
-            }
+                const response = await fetch(`${API_URL}/destinations/`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (response.ok) { setDestinations(await response.json()); }
+            } catch (error) { console.error("Échec de la récupération des destinations:", error); }
         };
         fetchDestinations();
     }, [token]);
 
     const handleFileChange = (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            setFile(e.target.files[0]);
-            setError('');
-        }
+        if (e.target.files && e.target.files.length > 0) { setFile(e.target.files[0]); setError(''); }
     };
 
-    // --- LINUX DRAG FIX: Explicitly handle DragEnter ---
-    const handleDragEnter = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(true);
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // --- LINUX DRAG FIX: Explicitly set dropEffect ---
-        e.dataTransfer.dropEffect = 'copy';
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    };
-
+    const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setIsDragging(true); };
+    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
     const handleDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-        
+        e.preventDefault(); e.stopPropagation(); setIsDragging(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const droppedFile = e.dataTransfer.files[0];
             const fileType = droppedFile.type;
-            if (fileType === 'application/pdf' || fileType.startsWith('image/')) {
-                setFile(droppedFile);
-                setError('');
-            } else {
-                setError('Type de fichier non supporté. Veuillez télécharger une image ou un PDF.');
-            }
+            if (fileType === 'application/pdf' || fileType.startsWith('image/')) { setFile(droppedFile); setError(''); } else { setError('Type de fichier non supporté. Veuillez télécharger une image ou un PDF.'); }
         }
     };
 
-    const triggerFileInput = () => {
-        if (fileInputRef.current) {
-            fileInputRef.current.click();
-        }
-    };
-
-    const handleReset = () => {
-        setFile(null);
-        setDestination('');
-        setError('');
-    };
-
+    const triggerFileInput = () => { if (fileInputRef.current) { fileInputRef.current.click(); } };
+    const handleReset = () => { setFile(null); setDestination(''); setError(''); };
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!file) {
-            setError('Veuillez sélectionner un fichier à télécharger.');
-            return;
-        }
-
+        if (!file) { setError('Veuillez sélectionner un fichier à télécharger.'); return; }
         const formData = new FormData();
         formData.append('file', file);
-        if (destination) {
-            formData.append('destination', destination);
-        }
-
+        if (destination) { formData.append('destination', destination); }
         onUpload(formData, file);
     };
 
     return (
         <div className="form-container" style={{ maxWidth: 'none', margin: '0 0 2rem 0', padding: '2.5rem' }}>
             <h3 style={{ marginTop: 0 }}>Ajouter un Passeport</h3>
-            <p className="mb-2" style={{ color: 'var(--secondary-color)' }}>
-                Glissez votre document ci-dessous pour lancer l'extraction automatique.
-            </p>
-
+            <p className="mb-2" style={{ color: 'var(--secondary-color)' }}>Glissez votre document ci-dessous pour lancer l'extraction automatique.</p>
             {error && <p className="error-message">{error}</p>}
-
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label>Destination (Optionnel)</label>
-                    <input
-                        type="text"
-                        name="destination"
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        className="form-input"
-                        list="destination-datalist-ocr"
-                        placeholder="Ex: Voyage Japon 2024"
-                        autoComplete="off"
-                    />
-                    <datalist id="destination-datalist-ocr">
-                        {destinations.map(dest => <option key={dest} value={dest} />)}
-                    </datalist>
+                    <input type="text" name="destination" value={destination} onChange={(e) => setDestination(e.target.value)} className="form-input" list="destination-datalist-ocr" placeholder="Ex: Voyage Japon 2024" autoComplete="off" />
+                    <datalist id="destination-datalist-ocr">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist>
                 </div>
-
                 <div className="form-group">
                     <label>Document (Image ou PDF)</label>
-                    
-                    <div 
-                        className={`drop-zone ${isDragging ? 'active' : ''}`}
-                        onDragEnter={handleDragEnter}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={triggerFileInput}
-                    >
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileChange}
-                            accept="image/png, image/jpeg, image/jpg, application/pdf"
-                            style={{ display: 'none' }}
-                        />
+                    <div className={`drop-zone ${isDragging ? 'active' : ''}`} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={triggerFileInput}>
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, image/jpg, application/pdf" style={{ display: 'none' }} />
                         <UploadIcon />
-                        <p style={{ fontWeight: 600, color: '#374151' }}>
-                            {file ? `Fichier prêt : ${file.name}` : "Cliquez ou glissez votre fichier ici"}
-                        </p>
+                        <p style={{ fontWeight: 600, color: '#374151' }}>{file ? `Fichier prêt : ${file.name}` : "Cliquez ou glissez votre fichier ici"}</p>
                         {!file && <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>PNG, JPG ou PDF jusqu'à 10Mo</p>}
                     </div>
                 </div>
-
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
                     <button type="button" onClick={handleReset} className="btn" style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>Annuler</button>
-                    <button type="submit" className="btn btn-primary" disabled={!file}>
-                        Lancer l'analyse
-                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={!file}>Lancer l'analyse</button>
                 </div>
             </form>
         </div>
     );
 }
 
-// --- OcrJobMonitor (UPDATED: Failures Auto-Displayed) ---
 function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-    
     const knownCompletedRef = useRef(new Set());
 
     const fetchJobs = useCallback(async () => {
         try {
-            const response = await fetch(`${API_URL}/ocr/jobs/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await fetch(`${API_URL}/ocr/jobs/`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (response.ok) {
                 const data = await response.json();
                 setJobs(data);
-
                 let hasNewCompletion = false;
                 data.forEach(job => {
                     if (job.status === 'complete' || job.status === 'failed') {
@@ -895,85 +760,41 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                         }
                     }
                 });
-
-                if (hasNewCompletion) {
-                    onJobComplete();
-                }
-            } else {
-                console.error('Échec de la récupération des jobs OCR.');
-            }
-        } catch (err) {
-            console.error('Une erreur est survenue lors de la récupération des jobs.', err);
-        } finally {
-            setIsLoading(false);
-        }
+                if (hasNewCompletion) { onJobComplete(); }
+            } else { console.error('Échec de la récupération des jobs OCR.'); }
+        } catch (err) { console.error('Une erreur est survenue lors de la récupération des jobs.', err); } finally { setIsLoading(false); }
     }, [token, onJobComplete]);
     
-    useEffect(() => {
-        fetchJobs();
-        const interval = setInterval(fetchJobs, 2000);
-        return () => clearInterval(interval);
-    }, [fetchJobs]);
-
-    useEffect(() => {
-        if (refreshTrigger > 0) {
-            fetchJobs();
-        }
-    }, [refreshTrigger, fetchJobs]);
+    useEffect(() => { fetchJobs(); const interval = setInterval(fetchJobs, 2000); return () => clearInterval(interval); }, [fetchJobs]);
+    useEffect(() => { if (refreshTrigger > 0) { fetchJobs(); } }, [refreshTrigger, fetchJobs]);
 
     const handleRemoveJob = async (jobIdToRemove) => {
         if (!window.confirm("Voulez-vous vraiment supprimer ce job ?")) return;
         try {
-            const response = await fetch(`${API_URL}/ocr/jobs/${jobIdToRemove}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                setJobs(prevJobs => prevJobs.filter(job => job.id !== jobIdToRemove));
-            } else {
-                console.error("Failed to delete job");
-                setError("Échec de la suppression du job.");
-            }
-        } catch (err) {
-            console.error("Error deleting job:", err);
-            setError("Une erreur est survenue lors de la suppression du job.");
-        }
+            const response = await fetch(`${API_URL}/ocr/jobs/${jobIdToRemove}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) { setJobs(prevJobs => prevJobs.filter(job => job.id !== jobIdToRemove)); } else { setError("Échec de la suppression du job."); }
+        } catch (err) { setError("Une erreur est survenue lors de la suppression du job."); }
     };
 
     const formatDate = (dateString) => {
         if (!dateString) return '';
-        return new Date(dateString).toLocaleString('fr-FR', {
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit'
-        });
+        return new Date(dateString).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
 
     let displayJobs = [...jobs];
-    
     if (uploadingFile) {
         const isRealJobPresent = jobs.length > 0 && jobs[0].file_name === uploadingFile.name;
-        
         if (!isRealJobPresent) {
-            displayJobs.unshift({
-                id: 'temp-virtual-id', 
-                file_name: uploadingFile.name,
-                created_at: new Date().toISOString(),
-                status: 'processing',
-                progress: 0,
-                successes: [],
-                failures: []
-            });
+            displayJobs.unshift({ id: 'temp-virtual-id', file_name: uploadingFile.name, created_at: new Date().toISOString(), status: 'processing', progress: 0, successes: [], failures: [] });
         }
     }
 
-    if (isLoading && !uploadingFile && jobs.length === 0) return null; // Hide if empty
+    if (isLoading && !uploadingFile && jobs.length === 0) return null;
     if (error) return <p className="error-message">{error}</p>;
 
     return (
         <div className="job-monitor">
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Fichiers en cours de traitement</h3>
-            
             {displayJobs.length === 0 ? (
                 <p className="info-message">Aucun document récent.</p>
             ) : (
@@ -983,36 +804,18 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                             <div className="job-header">
                                 <div className="job-details">
                                     <strong style={{ display: 'block', marginBottom: '0.25rem' }}>{job.file_name}</strong>
-                                    <small style={{ color: 'var(--secondary-color)' }}>
-                                        {formatDate(job.created_at)}
-                                    </small>
+                                    <small style={{ color: 'var(--secondary-color)' }}>{formatDate(job.created_at)}</small>
                                 </div>
                                 <div className="job-actions">
-                                     {job.id !== 'temp-virtual-id' && (
-                                         <button 
-                                              onClick={() => handleRemoveJob(job.id)} 
-                                              className="btn btn-danger"
-                                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', marginLeft: '0.5rem' }}
-                                         >
-                                              X
-                                         </button>
-                                     )}
+                                     {job.id !== 'temp-virtual-id' && ( <button onClick={() => handleRemoveJob(job.id)} className="btn btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', marginLeft: '0.5rem' }}>X</button> )}
                                 </div>
                             </div>
-                            
                             <ProgressBar progress={job.progress} status={job.status} />
-
-                            {/* ALWAYS SHOW FAILURES AUTOMATICALLY */}
                             {job.failures.length > 0 && (
                                 <div className="failure-list">
-                                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#b91c1c' }}>
-                                        Échecs détectés ({job.failures.length}):
-                                    </div>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#b91c1c' }}>Échecs détectés ({job.failures.length}):</div>
                                     {job.failures.map((failure, index) => (
-                                        <div key={index} className="failure-item">
-                                            <FailureIcon />
-                                            <span><b>Page {failure.page_number}</b> : {failure.detail}</span>
-                                        </div>
+                                        <div key={index} className="failure-item"><FailureIcon /><span><b>Page {failure.page_number}</b> : {failure.detail}</span></div>
                                     ))}
                                 </div>
                             )}
@@ -1024,408 +827,70 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
     );
 }
 
-function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
-    const [items, setItems] = useState([]);
-    const [editingItem, setEditingItem] = useState(null);
-    const [isCreating, setIsCreating] = useState(false);
-    const [filters, setFilters] = useState({});
-    const [dynamicDestinations, setDynamicDestinations] = useState([]);
-    const [selectedIds, setSelectedIds] = useState(new Set());
-    
-    // Bulk Edit State
-    const [isBulkEditingDest, setIsBulkEditingDest] = useState(false);
-    const [bulkDestination, setBulkDestination] = useState('');
-    
-    const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
-    const [uploadingFile, setUploadingFile] = useState(null);
+// --- MAIN COMPONENTS (DEFINED BEFORE USE TO AVOID REFERENCE ERRORS) ---
 
-    const fetchDestinationsForUser = useCallback(async (userId) => {
-        const query = userId ? `?user_id=${userId}` : '';
-        try {
-            const response = await fetch(`${API_URL}/destinations/${query}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (response.ok) {
-                setDynamicDestinations(await response.json());
-            }
-        } catch (error) {
-            console.error("Échec de la récupération des destinations:", error);
-        }
-    }, [token]);
-
+function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
+    const [formData, setFormData] = useState(item);
+    const [destinations, setDestinations] = useState([]);
+    const [error, setError] = useState('');
     useEffect(() => {
-        if (user.role === 'admin' && endpoint === 'passports') {
-            fetchDestinationsForUser(null);
-        }
-    }, [user, endpoint, fetchDestinationsForUser]);
-
-    const handleFilterChange = (filterName, value) => {
-        const newFilters = { ...filters, [filterName]: value };
-        if (user.role === 'admin' && filterName === 'user_filter') {
-            fetchDestinationsForUser(value || null);
-            newFilters.voyage_filter = '';
-        }
-        setFilters(newFilters);
-    };
-
-    const fetchData = useCallback(async () => {
-        const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
-        const query = new URLSearchParams(activeFilters);
-        const url = `${API_URL}/${endpoint}/?${query.toString()}`;
-        try {
-            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (response.ok) setItems(await response.json());
-            else console.error("Échec de la récupération des données pour", endpoint);
-        } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
-        setSelectedIds(new Set());
-        setIsBulkEditingDest(false); // Reset bulk edit mode
-        setBulkDestination('');
-    }, [endpoint, token, filters]);
+        const initialData = { ...item };
+        Object.entries(fields).forEach(([key, type]) => { if (type === 'datetime-local' && initialData[key]) { initialData[key] = new Date(initialData[key]).toISOString().slice(0, 16); } });
+        if (endpoint === 'passports' && !isCreating && item.voyages && item.voyages.length > 0) { initialData.destination = item.voyages[0].destination; }
+        setFormData(initialData);
+    }, [item, fields, endpoint, isCreating]);
     
-    useEffect(() => { fetchData(); }, [fetchData]);
-
-    const handleDelete = async (id) => {
-        if (window.confirm('Êtes-vous sûr de vouloir supprimer cet élément ?')) {
-            await fetch(`${API_URL}/${endpoint}/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-            fetchData();
-        }
-    };
-    
-    const handleSave = () => { 
-        setEditingItem(null); 
-        setIsCreating(false); 
-        setSelectedIds(new Set());
-        fetchData(); 
-    };
-
-    const handleUpload = async (formData, fileObj) => {
-        setUploadingFile(fileObj);
-        setSelectedIds(new Set());
-
-        try {
-            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`);
-                setUploadingFile(null);
-            } else {
-                setRefreshJobsTrigger(prev => prev + 1);
-                setTimeout(() => {
-                    setUploadingFile(null);
-                }, 2000);
-            }
-        } catch (err) {
-            alert('Une erreur inattendue est survenue lors du téléchargement.');
-            setUploadingFile(null);
-        }
-    };
-    
-    const handleJobComplete = useCallback(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const handleCancel = () => {
-        setEditingItem(null);
-        setIsCreating(false);
-        setSelectedIds(new Set());
-    }
-
-    const startCreating = () => {
-        let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
-        if (endpoint === 'admin/users') {
-            newItem.role = 'user';
-            newItem.uploaded_pages_count = 0;
-            newItem.page_credits = 0; // Default credits
-        }
-        if (endpoint === 'admin/invitations') newItem = { email: '' };
-        setEditingItem(newItem);
-        setIsCreating(true);
-    };
-
-    const handleToggleSelect = (id) => {
-        setSelectedIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(id)) {
-                newSet.delete(id);
-            } else {
-                newSet.add(id);
-            }
-            return newSet;
-        });
-    };
-
-    const handleToggleSelectAll = () => {
-        if (selectedIds.size === items.length) {
-            setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(items.map(i => i.id)));
-        }
-    };
-
-    const handleMultiDelete = async () => {
-        if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedIds.size} passeports ?`)) {
-            const payload = { passport_ids: Array.from(selectedIds) };
-            try {
-                const response = await fetch(`${API_URL}/passports/delete-multiple`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-                if (response.ok) {
-                    fetchData();
-                } else {
-                    const errorData = await response.json();
-                    alert(`Échec de la suppression multiple: ${errorData.detail}`);
-                }
-            } catch (err) {
-                alert(`Une erreur est survenue: ${err.message}`);
-            }
-        }
-    };
-
-    // --- BULK EXPORT LOGIC ---
-    const handleBulkExport = () => {
-        const selectedItems = items.filter(item => selectedIds.has(item.id));
-        if (selectedItems.length === 0) return;
-
-        // Define headers based on fields
-        const keys = Object.keys(fields).filter(k => k !== 'password');
-        // Add ID and manually computed fields if necessary
-        const allKeys = ['id', ...keys];
-        
-        const headerRow = allKeys.map(k => columnTranslations[k] || k).join(',');
-        
-        const rows = selectedItems.map(item => {
-            return allKeys.map(key => {
-                let val = item[key];
-                // Handle destination specifically if it's not in the base item but in voyages
-                if (key === 'destination' && (!val && item.voyages && item.voyages.length > 0)) {
-                    val = item.voyages[0].destination;
-                }
-                if (val === null || val === undefined) val = '';
-                // Escape commas/quotes if needed
-                const stringVal = String(val);
-                if (stringVal.includes(',')) return `"${stringVal}"`;
-                return stringVal;
-            }).join(',');
-        });
-
-        const csvContent = [headerRow, ...rows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'selection_passeports.csv');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    // --- BULK DESTINATION EDIT LOGIC ---
-    const handleBulkEditSubmit = async (e) => {
-        e.preventDefault();
-        if (!bulkDestination) return;
-
-        // We will loop through selected IDs and update them one by one.
-        // Ideally backend should support bulk update, but per instructions we use existing endpoints where possible.
-        // We use the PUT /passports/{id} endpoint.
-        
-        // We need to fetch the existing data for each passport first to avoid overwriting other fields?
-        // Actually, the PUT endpoint expects a full PassportCreate object usually.
-        // Let's look at `update_passport` in backend. It takes `PassportCreate`.
-        // `PassportCreate` has optional fields. 
-        // `crud.update_passport` updates fields present in the update_data. 
-        // So we can send ONLY the destination if the Pydantic model allows optionals.
-        // Checking schemas.PassportCreate: all fields are mandatory in Base except confidence_score.
-        // Wait, PassportCreate inherits PassportBase. PassportBase fields are mandatory (first_name, etc).
-        // WE MUST merge current data with new destination.
-        
-        const promises = Array.from(selectedIds).map(async (id) => {
-            const item = items.find(i => i.id === id);
-            if (!item) return;
-
-            // Prepare payload
-            const payload = {
-                first_name: item.first_name,
-                last_name: item.last_name,
-                birth_date: item.birth_date,
-                expiration_date: item.expiration_date,
-                nationality: item.nationality,
-                passport_number: item.passport_number,
-                confidence_score: item.confidence_score,
-                destination: bulkDestination // THE CHANGE
+    useEffect(() => {
+        if (endpoint === 'passports') {
+            const fetchDestinations = async () => {
+                try {
+                    const response = await fetch(`${API_URL}/destinations/`, { headers: { 'Authorization': `Bearer ${token}` } });
+                    if (response.ok) setDestinations(await response.json());
+                } catch (error) { console.error("Échec de la récupération des destinations:", error); }
             };
+            fetchDestinations();
+        }
+    }, [endpoint, token]);
 
-            return fetch(`${API_URL}/passports/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-        });
-
-        await Promise.all(promises);
-        fetchData(); // Refresh and reset selection
+    const handleChange = (e) => { const { name, value, type, checked } = e.target; setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value }); };
+    const handleSubmit = async (e) => {
+        e.preventDefault(); setError('');
+        let url = isCreating ? `${API_URL}/${endpoint}/` : `${API_URL}/${endpoint}/${item.id}`;
+        let method = isCreating ? 'POST' : 'PUT';
+        let body = { ...formData };
+        if (body.confidence_score === '') { body.confidence_score = null; }
+        if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
+        if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
+        
+        if (endpoint === 'admin/users') {
+            body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
+            body.page_credits = parseInt(body.page_credits, 10) || 0;
+        }
+        
+        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
+        if (response.ok) { onSave(); } else { 
+            const errorData = await response.json(); 
+            setError(errorData.detail || "Échec de l'enregistrement de l'élément."); 
+        }
     };
+    const formFields = { ...fields };
+    if (formFields.confidence_score) { delete formFields.confidence_score; }
+    if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2.5rem' }}><h3>Nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>Annuler</button><button type="submit" className="btn btn-primary">Envoyer</button></div></form>) }
+    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2.5rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'}</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Ex: Voyage 2024" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count' && key !== 'page_credits'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
+}
 
-    if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={handleCancel} fields={fields} endpoint={endpoint} token={token} />;
+function PreviewTable({ data }) {
+    if (!data || data.length === 0) return <p className="mt-2 text-center info-message">Aucune donnée trouvée.</p>;
+    const headers = Object.keys(data[0]);
+    return (<div className="mt-2"><h3 className="mb-1">Aperçu</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
+}
 
-    const displayFields = { ...fields };
-    if (endpoint === 'admin/users') delete displayFields.password;
-    if (endpoint === 'admin/invitations' && isCreating) delete displayFields.token;
-    if (endpoint === 'passports') delete displayFields.destination;
-
+function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionLabel, onChange }) {
+    const dataListId = `datalist-${name}-${Math.random()}`;
     return (
-        <div>
-            {endpoint === 'passports' && (
-                <>
-                    {/* Integrated Uploader */}
-                    <OcrUploader 
-                        token={token} 
-                        onUpload={handleUpload} 
-                    />
-                    
-                    {/* Job Monitor */}
-                    <OcrJobMonitor 
-                        token={token} 
-                        refreshTrigger={refreshJobsTrigger}
-                        onJobComplete={handleJobComplete}
-                        uploadingFile={uploadingFile}
-                    />
-                </>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
-                <h2>{title}</h2>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    
-                    {/* Bulk Actions for Passports */}
-                    {endpoint === 'passports' && selectedIds.size > 0 && (
-                        <>
-                            {isBulkEditingDest ? (
-                                <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <input 
-                                        type="text" 
-                                        className="form-input" 
-                                        placeholder="Nouvelle destination" 
-                                        value={bulkDestination}
-                                        onChange={e => setBulkDestination(e.target.value)}
-                                        required
-                                        style={{ padding: '0.4rem', width: '200px' }}
-                                    />
-                                    <button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button>
-                                    <button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button>
-                                </form>
-                            ) : (
-                                <>
-                                    <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>
-                                        Modifier Destination
-                                    </button>
-                                    <button onClick={handleBulkExport} className="btn" style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>
-                                        Exporter (.csv)
-                                    </button>
-                                    <button onClick={handleMultiDelete} className="btn btn-danger">
-                                        Supprimer ({selectedIds.size})
-                                    </button>
-                                </>
-                            )}
-                        </>
-                    )}
-                    
-                    <button onClick={startCreating} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>
-                        {endpoint === 'passports' ? '+ Manuel' : '+ Nouveau'}
-                    </button>
-                </div>
-            </div>
-
-            {endpoint.includes('users') && !filterConfig && (
-                <div className="filter-bar mb-2"><div className="form-group" style={{ flex: 1, marginBottom: 0 }}><input type="text" name="name_filter" placeholder="Rechercher (Nom, Email...)" onChange={(e) => handleFilterChange(e.target.name, e.target.value)} className="form-input" autoComplete="off"/></div></div>
-            )}
-            
-            {filterConfig && (
-                <div className="filter-bar mb-2">
-                    {filterConfig.map(filter => (
-                        <ComboBoxFilter key={filter.name} {...filter} onChange={handleFilterChange} />
-                    ))}
-                    {user.role === 'admin' && endpoint === 'passports' && (
-                         <ComboBoxFilter 
-                            key="voyage_filter" 
-                            name="voyage_filter"
-                            placeholder="Filtrer par Destination"
-                            options={dynamicDestinations.map(d => ({ destination: d }))}
-                            getOptionValue={(o) => o.destination}
-                            getOptionLabel={(o) => o.destination}
-                            onChange={handleFilterChange} 
-                        />
-                    )}
-                </div>
-            )}
-
-            <div className="table-container">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            {endpoint === 'passports' && (
-                                <th className="checkbox-cell">
-                                    <input
-                                        type="checkbox"
-                                        className="form-checkbox"
-                                        onChange={handleToggleSelectAll}
-                                        checked={items.length > 0 && selectedIds.size === items.length}
-                                        aria-label="Sélectionner tout"
-                                    />
-                                </th>
-                            )}
-                            {Object.keys(displayFields).map(field => (
-                                <th key={field}>{columnTranslations[field] || field.replace(/_/g, ' ')}</th>
-                            ))}
-                            <th>{columnTranslations['actions']}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items.length === 0 ? (
-                            <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr>
-                        ) : items.map(item => (
-                            <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
-                                {endpoint === 'passports' && (
-                                    <td className="checkbox-cell">
-                                        <input
-                                            type="checkbox"
-                                            className="form-checkbox"
-                                            onChange={() => handleToggleSelect(item.id)}
-                                            checked={selectedIds.has(item.id)}
-                                            aria-label={`Sélectionner ${item.first_name} ${item.last_name}`}
-                                        />
-                                    </td>
-                                )}
-                                {Object.keys(displayFields).map(field => {
-                                    let cellValue = item[field];
-                                    if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; }
-                                    return <td key={field}>{String(cellValue)}</td>
-                                })}
-                                <td>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button onClick={() => setEditingItem(item)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', backgroundColor: '#e0e7ff', color: '#4338ca' }}>Edit</button>
-                                        {endpoint !== 'passports' && (
-                                            <button onClick={() => handleDelete(item.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Suppr</button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <input list={dataListId} name={name} placeholder={placeholder} onChange={(e) => onChange(name, e.target.value)} className="form-input" autoComplete="off" />
+            <datalist id={dataListId}><option value="">-- Aucun --</option>{options.map(option => (<option key={getOptionValue(option)} value={getOptionValue(option)}>{getOptionLabel(option)}</option>))}</datalist>
         </div>
     );
 }
@@ -1435,28 +900,17 @@ function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
     const [previewData, setPreviewData] = useState(null);
     const [collapsed, setCollapsed] = useState(true);
 
-    const handleFilterChange = (name, value) => { 
-        setFilters(prev => ({ ...prev, [name]: value })); 
-        setPreviewData(null); 
-    };
-
+    const handleFilterChange = (name, value) => { setFilters(prev => ({ ...prev, [name]: value })); setPreviewData(null); };
     const getFilteredData = async () => {
         const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
-        if (user.role !== 'admin') {
-            delete activeFilters.user_id;
-        }
+        if (user.role !== 'admin') { delete activeFilters.user_id; }
         const query = new URLSearchParams(activeFilters).toString();
         try {
             const response = await fetch(`${API_URL}/export/data?${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (!response.ok) { 
-                const err = await response.json();
-                alert(`Échec de la récupération des données: ${err.detail}`); 
-                return null; 
-            }
+            if (!response.ok) { const err = await response.json(); alert(`Échec de la récupération des données: ${err.detail}`); return null; }
             return response;
         } catch (error) { alert('Une erreur est survenue lors de la récupération des données.'); return null; }
     };
-
     const handlePreview = async () => {
         const response = await getFilteredData();
         if (response) {
@@ -1468,7 +922,6 @@ function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
             setPreviewData(data);
         }
     };
-    
     const handleExport = async () => {
         const response = await getFilteredData();
         if (response) {
@@ -1486,73 +939,171 @@ function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#4b5563' }}>Exportation des Données</h3>
                  <span style={{ fontSize: '1.5rem', color: '#9ca3af' }}>{collapsed ? '+' : '-'}</span>
             </div>
-            
             {!collapsed && (
                 <div style={{ marginTop: '1.5rem' }}>
                     <div className="filter-bar mb-1">
-                        {user.role === 'admin' && (
-                            <ComboBoxFilter 
-                                name="user_id" 
-                                placeholder="Tous les utilisateurs" 
-                                options={adminUsers} 
-                                getOptionValue={(o) => o.id} 
-                                getOptionLabel={(o) => `${o.first_name} ${o.last_name}`} 
-                                onChange={handleFilterChange} 
-                            />
-                        )}
-                          <ComboBoxFilter 
-                            name="destination" 
-                            placeholder="Toutes destinations" 
-                            options={userDestinations.map(d => ({ destination: d }))} 
-                            getOptionValue={(o) => o.destination} 
-                            getOptionLabel={(o) => o.destination} 
-                            onChange={handleFilterChange} 
-                        />
+                        {user.role === 'admin' && ( <ComboBoxFilter name="user_id" placeholder="Tous les utilisateurs" options={adminUsers} getOptionValue={(o) => o.id} getOptionLabel={(o) => `${o.first_name} ${o.last_name}`} onChange={handleFilterChange} /> )}
+                        <ComboBoxFilter name="destination" placeholder="Toutes destinations" options={userDestinations.map(d => ({ destination: d }))} getOptionValue={(o) => o.destination} getOptionLabel={(o) => o.destination} onChange={handleFilterChange} />
                     </div>
                     <div style={{ display: 'flex', gap: '1rem' }}>
                          <button onClick={handlePreview} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>Aperçu</button>
                          <button onClick={handleExport} className="btn btn-primary">Télécharger CSV</button>
                     </div>
-                    
-                    {previewData && (
-                        <>
-                            <PreviewTable data={previewData} />
-                        </>
-                    )}
+                    {previewData && ( <PreviewTable data={previewData} /> )}
                 </div>
             )}
         </div>
     );
 }
 
-function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionLabel, onChange }) {
-    const dataListId = `datalist-${name}-${Math.random()}`;
+function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
+    const [items, setItems] = useState([]);
+    const [editingItem, setEditingItem] = useState(null);
+    const [isCreating, setIsCreating] = useState(false);
+    const [filters, setFilters] = useState({});
+    const [dynamicDestinations, setDynamicDestinations] = useState([]);
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [isBulkEditingDest, setIsBulkEditingDest] = useState(false);
+    const [bulkDestination, setBulkDestination] = useState('');
+    const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
+    const [uploadingFile, setUploadingFile] = useState(null);
+
+    const fetchDestinationsForUser = useCallback(async (userId) => {
+        const query = userId ? `?user_id=${userId}` : '';
+        try {
+            const response = await fetch(`${API_URL}/destinations/${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) { setDynamicDestinations(await response.json()); }
+        } catch (error) { console.error("Échec de la récupération des destinations:", error); }
+    }, [token]);
+
+    useEffect(() => { if (user.role === 'admin' && endpoint === 'passports') { fetchDestinationsForUser(null); } }, [user, endpoint, fetchDestinationsForUser]);
+
+    const handleFilterChange = (filterName, value) => {
+        const newFilters = { ...filters, [filterName]: value };
+        if (user.role === 'admin' && filterName === 'user_filter') { fetchDestinationsForUser(value || null); newFilters.voyage_filter = ''; }
+        setFilters(newFilters);
+    };
+
+    const fetchData = useCallback(async () => {
+        const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
+        const query = new URLSearchParams(activeFilters);
+        const url = `${API_URL}/${endpoint}/?${query.toString()}`;
+        try {
+            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) setItems(await response.json()); else console.error("Échec de la récupération des données pour", endpoint);
+        } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
+        setSelectedIds(new Set()); setIsBulkEditingDest(false); setBulkDestination('');
+    }, [endpoint, token, filters]);
+    
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const handleDelete = async (id) => {
+        if (window.confirm('Êtes-vous sûr de vouloir supprimer cet élément ?')) {
+            await fetch(`${API_URL}/${endpoint}/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+            fetchData();
+        }
+    };
+    
+    const handleSave = () => { setEditingItem(null); setIsCreating(false); setSelectedIds(new Set()); fetchData(); };
+    const handleUpload = async (formData, fileObj) => {
+        setUploadingFile(fileObj); setSelectedIds(new Set());
+        try {
+            const response = await fetch(`${API_URL}/passports/upload-and-extract/`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData, });
+            if (!response.ok) { const data = await response.json(); alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`); setUploadingFile(null); } else { setRefreshJobsTrigger(prev => prev + 1); setTimeout(() => { setUploadingFile(null); }, 2000); }
+        } catch (err) { alert('Une erreur inattendue est survenue lors du téléchargement.'); setUploadingFile(null); }
+    };
+    const handleJobComplete = useCallback(() => { fetchData(); }, [fetchData]);
+    const handleCancel = () => { setEditingItem(null); setIsCreating(false); setSelectedIds(new Set()); }
+    const startCreating = () => {
+        let newItem = Object.keys(fields).reduce((acc, key) => ({ ...acc, [key]: '' }), {});
+        if (endpoint === 'admin/users') { newItem.role = 'user'; newItem.uploaded_pages_count = 0; newItem.page_credits = 0; }
+        if (endpoint === 'admin/invitations') newItem = { email: '' };
+        setEditingItem(newItem); setIsCreating(true);
+    };
+    const handleToggleSelect = (id) => { setSelectedIds(prev => { const newSet = new Set(prev); if (newSet.has(id)) { newSet.delete(id); } else { newSet.add(id); } return newSet; }); };
+    const handleToggleSelectAll = () => { if (selectedIds.size === items.length) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(items.map(i => i.id))); } };
+    const handleMultiDelete = async () => {
+        if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedIds.size} passeports ?`)) {
+            const payload = { passport_ids: Array.from(selectedIds) };
+            try {
+                const response = await fetch(`${API_URL}/passports/delete-multiple`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (response.ok) { fetchData(); } else { const errorData = await response.json(); alert(`Échec de la suppression multiple: ${errorData.detail}`); }
+            } catch (err) { alert(`Une erreur est survenue: ${err.message}`); }
+        }
+    };
+    const handleBulkExport = () => {
+        const selectedItems = items.filter(item => selectedIds.has(item.id));
+        if (selectedItems.length === 0) return;
+        const keys = Object.keys(fields).filter(k => k !== 'password');
+        const allKeys = ['id', ...keys];
+        const headerRow = allKeys.map(k => columnTranslations[k] || k).join(',');
+        const rows = selectedItems.map(item => {
+            return allKeys.map(key => {
+                let val = item[key];
+                if (key === 'destination' && (!val && item.voyages && item.voyages.length > 0)) { val = item.voyages[0].destination; }
+                if (val === null || val === undefined) val = '';
+                const stringVal = String(val);
+                if (stringVal.includes(',')) return `"${stringVal}"`;
+                return stringVal;
+            }).join(',');
+        });
+        const csvContent = [headerRow, ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a'); link.href = url; link.setAttribute('download', 'selection_passeports.csv');
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+    const handleBulkEditSubmit = async (e) => {
+        e.preventDefault(); if (!bulkDestination) return;
+        const promises = Array.from(selectedIds).map(async (id) => {
+            const item = items.find(i => i.id === id); if (!item) return;
+            const payload = { first_name: item.first_name, last_name: item.last_name, birth_date: item.birth_date, expiration_date: item.expiration_date, nationality: item.nationality, passport_number: item.passport_number, confidence_score: item.confidence_score, destination: bulkDestination };
+            return fetch(`${API_URL}/passports/${id}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        });
+        await Promise.all(promises); fetchData();
+    };
+
+    if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={handleCancel} fields={fields} endpoint={endpoint} token={token} />;
+
+    const displayFields = { ...fields };
+    if (endpoint === 'admin/users') delete displayFields.password;
+    if (endpoint === 'admin/invitations' && isCreating) delete displayFields.token;
+    if (endpoint === 'passports') delete displayFields.destination;
+
     return (
-        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <input 
-                list={dataListId} 
-                name={name} 
-                placeholder={placeholder} 
-                onChange={(e) => onChange(name, e.target.value)} 
-                className="form-input"
-                autoComplete="off"
-            />
-            <datalist id={dataListId}>
-                <option value="">-- Aucun --</option> 
-                {options.map(option => (
-                    <option key={getOptionValue(option)} value={getOptionValue(option)}>
-                        {getOptionLabel(option)}
-                    </option>
-                ))}
-            </datalist>
+        <div>
+            {endpoint === 'passports' && ( <> <OcrUploader token={token} onUpload={handleUpload} /> <OcrJobMonitor token={token} refreshTrigger={refreshJobsTrigger} onJobComplete={handleJobComplete} uploadingFile={uploadingFile} /> </> )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
+                <h2>{title}</h2>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    {endpoint === 'passports' && selectedIds.size > 0 && ( <> {isBulkEditingDest ? ( <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}><input type="text" className="form-input" placeholder="Nouvelle destination" value={bulkDestination} onChange={e => setBulkDestination(e.target.value)} required style={{ padding: '0.4rem', width: '200px' }} /><button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button><button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button></form> ) : ( <> <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>Modifier Destination</button> <button onClick={handleBulkExport} className="btn" style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>Exporter (.csv)</button> <button onClick={handleMultiDelete} className="btn btn-danger">Supprimer ({selectedIds.size})</button> </> )} </> )}
+                    <button onClick={startCreating} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>{endpoint === 'passports' ? '+ Manuel' : '+ Nouveau'}</button>
+                </div>
+            </div>
+            {endpoint.includes('users') && !filterConfig && ( <div className="filter-bar mb-2"><div className="form-group" style={{ flex: 1, marginBottom: 0 }}><input type="text" name="name_filter" placeholder="Rechercher (Nom, Email...)" onChange={(e) => handleFilterChange(e.target.name, e.target.value)} className="form-input" autoComplete="off"/></div></div> )}
+            {filterConfig && ( <div className="filter-bar mb-2">{filterConfig.map(filter => ( <ComboBoxFilter key={filter.name} {...filter} onChange={handleFilterChange} /> ))} {user.role === 'admin' && endpoint === 'passports' && ( <ComboBoxFilter key="voyage_filter" name="voyage_filter" placeholder="Filtrer par Destination" options={dynamicDestinations.map(d => ({ destination: d }))} getOptionValue={(o) => o.destination} getOptionLabel={(o) => o.destination} onChange={handleFilterChange} /> )} </div> )}
+            <div className="table-container">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            {endpoint === 'passports' && ( <th className="checkbox-cell"><input type="checkbox" className="form-checkbox" onChange={handleToggleSelectAll} checked={items.length > 0 && selectedIds.size === items.length} aria-label="Sélectionner tout" /></th> )}
+                            {Object.keys(displayFields).map(field => ( <th key={field}>{columnTranslations[field] || field.replace(/_/g, ' ')}</th> ))}
+                            <th>{columnTranslations['actions']}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 ? ( <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr> ) : items.map(item => (
+                            <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
+                                {endpoint === 'passports' && ( <td className="checkbox-cell"><input type="checkbox" className="form-checkbox" onChange={() => handleToggleSelect(item.id)} checked={selectedIds.has(item.id)} aria-label={`Sélectionner ${item.first_name} ${item.last_name}`} /></td> )}
+                                {Object.keys(displayFields).map(field => { let cellValue = item[field]; if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; } return <td key={field}>{String(cellValue)}</td> })}
+                                <td><div style={{ display: 'flex', gap: '0.5rem' }}><button onClick={() => setEditingItem(item)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', backgroundColor: '#e0e7ff', color: '#4338ca' }}>Edit</button>{endpoint !== 'passports' && ( <button onClick={() => handleDelete(item.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Suppr</button> )}</div></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
-}
-
-function PreviewTable({ data }) {
-    if (!data || data.length === 0) return <p className="mt-2 text-center info-message">Aucune donnée trouvée.</p>;
-    const headers = Object.keys(data[0]);
-    return (<div className="mt-2"><h3 className="mb-1">Aperçu</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
 
 // --------------- END OF FILE: ../frontend/src/App.jsx ---------------
