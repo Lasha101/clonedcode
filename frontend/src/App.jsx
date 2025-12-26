@@ -6,116 +6,254 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 // otherwise fall back to '/api' for local development.
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-// --- STYLES COMPONENT (Integrated) ---
+// --- STYLES COMPONENT (Modern & Cosy Update) ---
 const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --primary-color: #2a6fdb;
-            --primary-hover: #1e5a9b;
-            --secondary-color: #6c757d;
-            --background-color: #f8f9fa;
+            /* Modern Indigo/Violet Palette */
+            --primary-color: #4f46e5; /* Indigo-600 */
+            --primary-hover: #4338ca; /* Indigo-700 */
+            --secondary-color: #6b7280; /* Gray-500 */
+            --background-color: #f3f4f6; /* Gray-100 (Softer background) */
             --surface-color: #ffffff;
-            --text-color: #212529;
-            --border-color: #dee2e6;
-            --danger-color: #dc3545;
-            --danger-hover: #a71d2a;
-            --success-color: #198754;
-            --warning-color: #ffc107;
-            --processing-color: #0dcaf0;
-            --font-family: 'Inter', sans-serif;
+            --text-color: #1f2937; /* Gray-800 */
+            --border-color: #e5e7eb; /* Gray-200 */
+            
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --processing-color: #3b82f6;
+            
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            --radius-lg: 16px;
+            --radius-md: 10px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
-        body { font-family: var(--font-family); background-color: var(--background-color); color: var(--text-color); margin: 0; line-height: 1.6; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-        .app-header { display: flex; justify-content: space-between; align-items: center; background-color: var(--surface-color); padding: 1.5rem 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); margin-bottom: 2rem; }
-        .app-header h1 { font-size: 2rem; font-weight: 700; color: var(--primary-color); margin: 0; }
-        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease-in-out; text-align: center; }
-        .btn:disabled { background-color: var(--secondary-color); cursor: not-allowed; }
-        .btn-primary { background-color: var(--primary-color); color: white; }
-        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .btn-danger { background-color: var(--danger-color); color: white; }
-        .btn-danger:hover { background-color: var(--danger-hover); }
-        .form-container { background-color: var(--surface-color); padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); max-width: 500px; margin: 2rem auto; }
-        .form-container h2 { text-align: center; margin-bottom: 2rem; font-size: 1.75rem; }
-        .form-group { margin-bottom: 1.5rem; }
-        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--secondary-color); }
-        .form-input { width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
-        .form-input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(42, 111, 219, 0.2); }
-        .form-checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; }
-        .password-container { position: relative; display: flex; align-items: center; }
-        .password-container .form-input { padding-right: 40px; }
-        .password-toggle-btn { position: absolute; right: 10px; background: none; border: none; cursor: pointer; color: var(--secondary-color); padding: 0; display: flex; align-items: center; justify-content: center; }
-        .error-message { background-color: rgba(220, 53, 69, 0.1); color: var(--danger-color); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; }
-        .success-message { background-color: rgba(25, 135, 84, 0.1); color: var(--success-color); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; }
-        .info-message { background-color: #eef2f7; color: #334d6e; padding: 1rem; border-radius: 8px; }
-        .dashboard-layout { display: grid; grid-template-columns: 250px 1fr; gap: 2rem; }
-        .dashboard-nav { background-color: var(--surface-color); padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); align-self: start; }
-        .dashboard-nav h3 { margin-top: 0; font-size: 1.25rem; margin-bottom: 0.5rem; }
-        .nav-menu { display: flex; flex-direction: column; gap: 0.5rem; }
-        .nav-button { text-align: left; padding: 0.75rem 1rem; border: none; background-color: transparent; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 500; width: 100%; transition: background-color 0.2s, color 0.2s; }
-        .nav-button:hover { background-color: #f1f3f5; }
-        .nav-button.active { background-color: var(--primary-color); color: white; }
-        .dashboard-content { background-color: var(--surface-color); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .dashboard-content h2 { margin-top: 0; margin-bottom: 2rem; font-size: 1.75rem; }
-        .table-container { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; }
-        .table { width: 100%; border-collapse: collapse; }
-        .table th, .table td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border-color); white-space: normal; }
-        .table thead th { background-color: #f8f9fa; font-weight: 600; }
-        .table tbody tr:last-child td { border-bottom: none; }
-        .table tbody tr:hover { background-color: #f1f3f5; }
-        .table tbody tr.selected-row { background-color: rgba(42, 111, 219, 0.1); }
-        .table th.checkbox-cell, .table td.checkbox-cell { width: 1%; text-align: center; }
-        .filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-        .capitalize { text-transform: capitalize; }
-        .text-center { text-align: center; }
-        .mt-1 { margin-top: 1rem; }
-        .mt-2 { margin-top: 2rem; }
-        .mb-1 { margin-bottom: 1rem; }
-        .mb-2 { margin-bottom: 2rem; }
-        
-        /* --- JOB MONITOR STYLES --- */
-        .job-monitor { background-color: var(--surface-color); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-        .job-monitor h3 { margin-top: 0; }
-        .job-list { list-style-type: none; padding: 0; margin: 0; max-height: 400px; overflow-y: auto; }
-        .job-item { display: flex; flex-direction: column; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; gap: 0.5rem; }
-        .job-item:last-child { margin-bottom: 0; }
-        .job-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        .job-details { flex: 1; min-width: 200px; padding-right: 1rem; }
-        .job-details strong { font-size: 1.1rem; }
-        .job-actions { display: flex; align-items: center; gap: 0.5rem; }
-        .job-results-toggle { background: none; border: none; color: var(--primary-color); cursor: pointer; font-weight: 600; padding: 0.5rem; }
-        .job-results-details { width: 100%; padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-color); }
-        .results-summary { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
-        .results-list { list-style-type: none; padding: 0; max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-        .results-list li { display: flex; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); }
-        .results-list li:last-child { border-bottom: none; }
-        .result-icon { margin-right: 1rem; }
-        .result-success .result-icon { color: var(--success-color); }
-        .result-failure .result-icon { color: var(--danger-color); }
 
-        /* --- PROGRESS BAR STYLES --- */
-        .progress-container { width: 100%; background-color: #e9ecef; border-radius: 8px; height: 1.5rem; overflow: hidden; margin-top: 0.5rem; position: relative; }
-        .progress-fill { height: 100%; transition: width 0.6s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: visible; }
+        body { 
+            font-family: var(--font-family); 
+            background-color: var(--background-color); 
+            color: var(--text-color); 
+            margin: 0; 
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+        /* HEADER: Glassmorphism feel */
+        .app-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background-color: rgba(255, 255, 255, 0.85); 
+            backdrop-filter: blur(12px);
+            padding: 1rem 2rem; 
+            border-radius: var(--radius-lg); 
+            box-shadow: var(--shadow-sm); 
+            margin-bottom: 2rem; 
+            border: 1px solid rgba(255,255,255,0.5);
+            position: sticky;
+            top: 1rem;
+            z-index: 100;
+        }
+        .app-header h1 { 
+            font-size: 1.5rem; 
+            font-weight: 700; 
+            color: var(--primary-color); 
+            margin: 0; 
+            letter-spacing: -0.025em;
+        }
+
+        /* BUTTONS: Soft & Tactile */
+        .btn { 
+            padding: 0.6rem 1.2rem; 
+            border: none; 
+            border-radius: var(--radius-md); 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+            text-align: center; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { background-color: #d1d5db; cursor: not-allowed; transform: none; }
+        
+        .btn-primary { 
+            background-color: var(--primary-color); 
+            color: white; 
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+        }
+        .btn-primary:hover:not(:disabled) { 
+            background-color: var(--primary-hover); 
+            box-shadow: 0 6px 10px rgba(79, 70, 229, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger { background-color: var(--surface-color); color: var(--danger-color); border: 1px solid var(--border-color); }
+        .btn-danger:hover { background-color: #fef2f2; border-color: var(--danger-color); }
+
+        /* FORMS: Clean & Focus states */
+        .form-container { 
+            background-color: var(--surface-color); 
+            padding: 2.5rem; 
+            border-radius: var(--radius-lg); 
+            box-shadow: var(--shadow-lg); 
+            max-width: 500px; 
+            margin: 2rem auto; 
+            border: 1px solid var(--border-color);
+        }
+        .form-container h2 { text-align: center; margin-bottom: 2rem; font-size: 1.75rem; color: #111827; letter-spacing: -0.025em; }
+        
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 600; color: #374151; }
+        
+        .form-input { 
+            width: 100%; 
+            padding: 0.75rem 1rem; 
+            border: 1px solid var(--border-color); 
+            border-radius: var(--radius-md); 
+            font-size: 0.95rem; 
+            box-sizing: border-box; 
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background-color: #f9fafb;
+        }
+        .form-input:focus { 
+            outline: none; 
+            border-color: var(--primary-color); 
+            background-color: #fff;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); 
+        }
+        .form-checkbox { width: 1.2rem; height: 1.2rem; cursor: pointer; accent-color: var(--primary-color); }
+
+        .password-container { position: relative; }
+        .password-container .form-input { padding-right: 40px; }
+        .password-toggle-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--secondary-color); padding: 0; display: flex; }
+        .password-toggle-btn:hover { color: var(--primary-color); }
+
+        /* MESSAGES */
+        .error-message { background-color: #fef2f2; color: var(--danger-color); padding: 0.75rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; text-align: center; border: 1px solid #fecaca; font-size: 0.9rem; }
+        .success-message { background-color: #ecfdf5; color: var(--success-color); padding: 0.75rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; text-align: center; border: 1px solid #a7f3d0; font-size: 0.9rem; }
+        .info-message { background-color: #eff6ff; color: var(--primary-color); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid #bfdbfe; font-size: 0.9rem; }
+
+        /* DASHBOARD GRID */
+        .dashboard-layout { display: grid; grid-template-columns: 260px 1fr; gap: 2rem; margin-top: 1rem; }
+        @media (max-width: 768px) { .dashboard-layout { grid-template-columns: 1fr; } }
+
+        /* NAVIGATION SIDEBAR */
+        .dashboard-nav { 
+            background-color: var(--surface-color); 
+            padding: 1.5rem; 
+            border-radius: var(--radius-lg); 
+            box-shadow: var(--shadow-sm); 
+            border: 1px solid var(--border-color);
+            position: sticky;
+            top: 6rem;
+        }
+        .dashboard-nav h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 0.25rem; font-weight: 700; }
+        .dashboard-nav .credit-display { margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--secondary-color); }
+        
+        .nav-menu { display: flex; flex-direction: column; gap: 0.5rem; }
+        .nav-button { 
+            text-align: left; 
+            padding: 0.75rem 1rem; 
+            border: none; 
+            background-color: transparent; 
+            border-radius: var(--radius-md); 
+            cursor: pointer; 
+            font-size: 0.95rem; 
+            font-weight: 500; 
+            width: 100%; 
+            color: #4b5563;
+            transition: all 0.2s; 
+        }
+        .nav-button:hover { background-color: #f3f4f6; color: var(--primary-color); }
+        .nav-button.active { 
+            background-color: #eef2ff; 
+            color: var(--primary-color); 
+            font-weight: 600;
+        }
+
+        /* MAIN CONTENT AREA */
+        .dashboard-content { 
+            background-color: var(--surface-color); 
+            padding: 2.5rem; 
+            border-radius: var(--radius-lg); 
+            box-shadow: var(--shadow-sm); 
+            border: 1px solid var(--border-color);
+            min-height: 500px;
+            animation: fadeIn 0.4s ease-out;
+        }
+        .dashboard-content h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.5rem; color: #111827; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+
+        /* TABLES: Modern & Clean */
+        .table-container { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: white; }
+        .table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .table th, .table td { padding: 1rem 1.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .table thead th { background-color: #f9fafb; font-weight: 600; color: #374151; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .table tbody tr:last-child td { border-bottom: none; }
+        .table tbody tr { transition: background-color 0.1s; }
+        .table tbody tr:hover { background-color: #f9fafb; }
+        .table tbody tr.selected-row { background-color: #eff6ff; }
+        .table th.checkbox-cell, .table td.checkbox-cell { width: 1%; text-align: center; padding-right: 0.5rem; }
+
+        /* FILTERS */
+        .filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: #f9fafb; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
+
+        /* JOB MONITOR */
+        .job-monitor { background-color: var(--surface-color); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); margin-bottom: 2rem; }
+        .job-list { list-style-type: none; padding: 0; margin: 0; max-height: 400px; overflow-y: auto; }
+        .job-item { padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 0.75rem; background: #fff; transition: box-shadow 0.2s; }
+        .job-item:hover { box-shadow: var(--shadow-sm); }
+        .job-header { display: flex; justify-content: space-between; align-items: center; }
+
+        /* PROGRESS BARS */
+        .progress-container { width: 100%; background-color: #e5e7eb; border-radius: 999px; height: 1rem; overflow: hidden; margin-top: 0.75rem; position: relative; }
+        .progress-fill { height: 100%; transition: width 0.6s ease; border-radius: 999px; }
         .progress-processing { background-color: var(--processing-color); background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem; animation: progress-bar-stripes 1s linear infinite; }
         .progress-complete { background-color: var(--success-color); }
         .progress-failed { background-color: var(--danger-color); }
-        .progress-text { position: absolute; width: 100%; text-align: center; left: 0; top: 0; line-height: 1.5rem; color: #333; font-size: 0.85rem; font-weight: 600; text-shadow: 0 0 2px rgba(255,255,255,0.8); pointer-events: none; }
+        .progress-text { font-size: 0.75rem; font-weight: 600; color: #4b5563; margin-top: 0.25rem; display: block; text-align: right; }
         
         @keyframes progress-bar-stripes { 0% { background-position: 1rem 0; } 100% { background-position: 0 0; } }
 
-        /* --- NEW: CREDIT & DRAG-AND-DROP STYLES --- */
-        .credit-badge { background-color: var(--primary-color); color: white; padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.85rem; margin-bottom: 1rem; display: inline-block; font-weight: 500; }
-        .drop-zone { border: 2px dashed var(--border-color); border-radius: 8px; padding: 3rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background-color: #f8f9fa; margin-bottom: 1.5rem; position: relative; }
-        .drop-zone:hover { border-color: var(--primary-color); background-color: #f1f3f5; }
-        .drop-zone.active { border-color: var(--primary-color); background-color: rgba(42, 111, 219, 0.05); transform: scale(1.01); box-shadow: 0 4px 12px rgba(42, 111, 219, 0.1); }
+        /* MISC UI ELEMENTS */
+        .credit-badge { background-color: #e0e7ff; color: var(--primary-color); padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-top: 0.5rem; }
         
-        /* THIS IS THE CRITICAL FIX FOR LINUX/UBUNTU DRAG AND DROP */
-        /* It ensures the text/icons don't capture the mouse events, so the parent div always gets the drop */
+        .drop-zone { border: 2px dashed #cbd5e1; border-radius: var(--radius-lg); padding: 4rem 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background-color: #f8fafc; margin-bottom: 1.5rem; }
+        .drop-zone:hover, .drop-zone.active { border-color: var(--primary-color); background-color: #eff6ff; }
         .drop-zone * { pointer-events: none; }
+        .drop-zone svg { width: 48px; height: 48px; color: #94a3b8; margin-bottom: 1rem; }
+
+        /* LANDING PAGE (Centered) */
+        .landing-container { display: flex; justify-content: center; align-items: center; min-height: 80vh; animation: fadeIn 0.6s ease-out; }
+        .landing-auth { width: 100%; max-width: 450px; }
+        .landing-auth .form-container { width: 100%; margin: 0; border: none; box-shadow: var(--shadow-lg); }
+
+        .legal-footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-color); text-align: center; color: #9ca3af; font-size: 0.85rem; }
+        .legal-links { display: flex; justify-content: center; gap: 2rem; margin-bottom: 1rem; }
+        .legal-links a { color: #6b7280; text-decoration: none; transition: color 0.2s; font-weight: 500; }
+        .legal-links a:hover { color: var(--primary-color); }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        .drop-zone p { margin: 0; color: var(--secondary-color); font-weight: 500; }
-        .drop-zone svg { width: 48px; height: 48px; color: var(--secondary-color); margin-bottom: 1rem; }
+        .mt-1 { margin-top: 1rem; }
+        .mb-1 { margin-bottom: 1rem; }
+        .mb-2 { margin-bottom: 2rem; }
+
+        /* Failure List Styling */
+        .failure-list { margin-top: 0.75rem; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 0.75rem; }
+        .failure-item { display: flex; gap: 0.5rem; color: #dc2626; font-size: 0.85rem; margin-bottom: 0.25rem; align-items: flex-start; }
+        .failure-item:last-child { margin-bottom: 0; }
     `}</style>
 );
 
@@ -163,7 +301,7 @@ const FailureIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" he
 // --- ProgressBar Component ---
 const ProgressBar = ({ progress, status }) => {
     let statusClass = 'progress-processing';
-    let label = `${progress}% - Traitement en cours...`;
+    let label = `${progress}% - Traitement`;
 
     if (status === 'complete') {
         statusClass = 'progress-complete';
@@ -172,23 +310,25 @@ const ProgressBar = ({ progress, status }) => {
         statusClass = 'progress-failed';
         label = 'Échoué';
     } else if (progress === 0) {
-        label = "Démarrage du téléchargement..."; 
+        label = "Démarrage..."; 
     } else if (progress < 15) {
-        label = `${progress}% - Téléchargement...`;
+        label = `${progress}% - Upload`;
     } else if (progress < 75) {
-        label = `${progress}% - Analyse OCR...`;
+        label = `${progress}% - OCR`;
     } else {
-        label = `${progress}% - Écriture en Base de Données...`;
+        label = `${progress}% - Sauvegarde`;
     }
 
     return (
-        <div className="progress-container">
-            <div 
-                className={`progress-fill ${statusClass}`} 
-                style={{ width: `${progress > 0 ? progress : 5}%` }}
-            >
+        <div style={{ marginTop: '0.5rem' }}>
+            <div className="progress-container">
+                <div 
+                    className={`progress-fill ${statusClass}`} 
+                    style={{ width: `${progress > 0 ? progress : 5}%` }}
+                >
+                </div>
             </div>
-            <div className="progress-text">{label}</div>
+            <span className="progress-text">{label}</span>
         </div>
     );
 };
@@ -264,22 +404,40 @@ function Login({ setToken, fetchUser }) {
     };
 
     return (
-        <div className="form-container">
-            <h2>Connexion</h2>
-            {error && <p className="error-message">{error}</p>}
-            <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                    <label>Nom d'utilisateur</label>
-                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="form-input" required />
+        <div>
+            <div className="landing-container">
+                {/* CENTERED AUTH FORM */}
+                <div className="landing-auth">
+                    <div className="form-container">
+                        <h2>Connexion</h2>
+                        {error && <p className="error-message">{error}</p>}
+                        <form onSubmit={handleSubmit}>
+                            <div className="form-group">
+                                <label>Nom d'utilisateur</label>
+                                <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="form-input" placeholder="Entrez votre identifiant" required />
+                            </div>
+                            <div className="form-group">
+                                <label>Mot de passe</label>
+                                <PasswordInput name="password" value={password} onChange={e => setPassword(e.target.value)} required={true} placeholder="Entrez votre mot de passe" />
+                            </div>
+                            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem', padding: '0.8rem' }} disabled={isLoading}>
+                                {isLoading ? 'Connexion...' : 'Se connecter'}
+                            </button>
+                        </form>
+                    </div>
                 </div>
-                <div className="form-group">
-                    <label>Mot de passe</label>
-                    <PasswordInput name="password" value={password} onChange={e => setPassword(e.target.value)} required={true} />
+            </div>
+
+            {/* MANDATORY FOOTER */}
+            <footer className="legal-footer">
+                <div className="legal-links">
+                    <a href="#">Mentions Légales</a>
+                    <a href="#">Politique de Confidentialité</a>
+                    <a href="#">CGU</a>
+                    <a href="#">Contact</a>
                 </div>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={isLoading}>
-                    {isLoading ? 'Connexion en cours...' : 'Se connecter'}
-                </button>
-            </form>
+                <p>&copy; {new Date().getFullYear()} Gestionnaire de Voyages - Tous droits réservés.</p>
+            </footer>
         </div>
     );
 }
@@ -313,7 +471,8 @@ function RegistrationPage({ registrationToken }) {
 }
 
 function Dashboard({ user, token, fetchUser }) {
-    const [activeTab, setActiveTab] = useState('account');
+    // DEFAULT VIEW IS PASSPORTS
+    const [activeTab, setActiveTab] = useState('passports');
     const [filterableUsers, setFilterableUsers] = useState([]);
     const [userSpecificDestinations, setUserSpecificDestinations] = useState([]);
 
@@ -352,11 +511,6 @@ function Dashboard({ user, token, fetchUser }) {
                 getOptionLabel: (o) => o.destination
               }];
 
-        const voyageFilterConfig = user.role === 'admin' 
-            ? [{ name: 'user_filter', placeholder: 'Filtrer par Utilisateur', options: filterableUsers, getOptionValue: (o) => o.id, getOptionLabel: (o) => `${o.first_name} ${o.last_name} (${o.user_name})` }] 
-            : null;
-            
-        // delivery_date removed from fields below
         const passportFields = { first_name: 'text', last_name: 'text', birth_date: 'date', expiration_date: 'date', nationality: 'text', passport_number: 'text', destination: 'text', confidence_score: 'number' };
         
         const userFields = { 
@@ -371,38 +525,88 @@ function Dashboard({ user, token, fetchUser }) {
             page_credits: 'number' // NEW FIELD
         };
 
+        const invitationFields = { email: 'email', token: 'text', expires_at: 'datetime-local', is_used: 'checkbox' };
+
         switch (activeTab) {
+            case 'passports': 
+                return <PassportsPage 
+                        token={token} 
+                        user={user} 
+                        adminUsers={filterableUsers} 
+                        userDestinations={userSpecificDestinations}
+                        fields={passportFields}
+                        filterConfig={passportFilterConfig}
+                       />;
             case 'account': return <AccountEditor user={user} token={token} fetchUser={fetchUser} />;
-            case 'passports': return <CrudManager title="Gérer les Passeports" endpoint="passports" token={token} user={user} fields={passportFields} filterConfig={passportFilterConfig} />;
-            case 'voyages': return <CrudManager title="Gérer les Voyages" endpoint="voyages" token={token} user={user} fields={{ destination: 'text' }} filterConfig={voyageFilterConfig} />;
-            case 'tools_export': return <ToolsAndExportPanel token={token} user={user} adminUsers={filterableUsers} userDestinations={userSpecificDestinations} />;
-            case 'users': return user.role === 'admin' ? <CrudManager title="Gérer les Utilisateurs" endpoint="admin/users" token={token} user={user} fields={userFields} /> : null;
-            case 'invitations': return user.role === 'admin' ? <CrudManager title="Gérer les Invitations" endpoint="admin/invitations" token={token} user={user} fields={{ email: 'email', token: 'text', expires_at: 'datetime-local', is_used: 'checkbox' }} /> : null;
+            case 'admin_manage': 
+                return <AdminManagementPage 
+                        token={token} 
+                        user={user} 
+                        userFields={userFields} 
+                        invitationFields={invitationFields} 
+                       />;
             default: return null;
         }
     };
+
     return (
         <div className="dashboard-layout">
             <nav className="dashboard-nav">
                 <h3>Bienvenue, {user.first_name}!</h3>
                 <div className="credit-display">
-                    <span className="credit-badge">Crédits restants : {user.page_credits} pages</span>
+                    <span className="credit-badge">Crédits : {user.page_credits}</span>
                 </div>
                 <div className="nav-menu">
-                    <button onClick={() => setActiveTab('account')} className={`nav-button ${activeTab === 'account' ? 'active' : ''}`}>Mon Compte</button>
                     <button onClick={() => setActiveTab('passports')} className={`nav-button ${activeTab === 'passports' ? 'active' : ''}`}>Passeports</button>
-                    <button onClick={() => setActiveTab('voyages')} className={`nav-button ${activeTab === 'voyages' ? 'active' : ''}`}>Voyages</button>
-                    <button onClick={() => setActiveTab('tools_export')} className={`nav-button ${activeTab === 'tools_export' ? 'active' : ''}`}>Outils & Exportation</button>
+                    
                     {user.role === 'admin' && (
-                        <>
-                            <hr />
-                            <button onClick={() => setActiveTab('users')} className={`nav-button ${activeTab === 'users' ? 'active' : ''}`}>Gérer les Utilisateurs</button>
-                            <button onClick={() => setActiveTab('invitations')} className={`nav-button ${activeTab === 'invitations' ? 'active' : ''}`}>Gérer les Invitations</button>
-                        </>
+                        <button onClick={() => setActiveTab('admin_manage')} className={`nav-button ${activeTab === 'admin_manage' ? 'active' : ''}`}>Administration</button>
                     )}
+
+                    <button onClick={() => setActiveTab('account')} className={`nav-button ${activeTab === 'account' ? 'active' : ''}`}>Mon Compte</button>
                 </div>
             </nav>
             <div className="dashboard-content">{renderTabContent()}</div>
+        </div>
+    );
+}
+
+// --- NEW COMPONENT: PASSPORTS PAGE (Combines Export, Tools, Upload, and List) ---
+function PassportsPage({ token, user, adminUsers, userDestinations, fields, filterConfig }) {
+    return (
+        <div>
+            {/* Export & Tools Section (Merged at top) */}
+            <div className="tools-section" style={{ marginBottom: '2rem' }}>
+                <ToolsAndExportPanel 
+                    token={token} 
+                    user={user} 
+                    adminUsers={adminUsers} 
+                    userDestinations={userDestinations} 
+                />
+            </div>
+            
+            {/* The CRUD Manager handles the List and the integrated Upload */}
+            <CrudManager 
+                title="Mes Passeports" 
+                endpoint="passports" 
+                token={token} 
+                user={user} 
+                fields={fields} 
+                filterConfig={filterConfig} 
+            />
+        </div>
+    );
+}
+
+// --- NEW COMPONENT: ADMIN MANAGEMENT PAGE (Combines Users & Invitations) ---
+function AdminManagementPage({ token, user, userFields, invitationFields }) {
+    return (
+        <div>
+             <CrudManager title="Gérer les Utilisateurs" endpoint="admin/users" token={token} user={user} fields={userFields} />
+             
+             <div style={{ margin: '3rem 0', borderTop: '2px dashed #e5e7eb' }}></div>
+             
+             <CrudManager title="Gérer les Invitations" endpoint="admin/invitations" token={token} user={user} fields={invitationFields} />
         </div>
     );
 }
@@ -461,7 +665,7 @@ function AccountEditor({ user, token, fetchUser }) {
             {message && <p className="success-message">{message}</p>}
             
             <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                     <div className="form-group"><label>Prénom</label><input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="form-input" /></div>
                     <div className="form-group"><label>Nom de famille</label><input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="form-input" /></div>
                     <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} className="form-input" /></div>
@@ -477,7 +681,7 @@ function AccountEditor({ user, token, fetchUser }) {
                             className="form-input" 
                             readOnly={user.role !== 'admin'} 
                             disabled={user.role !== 'admin'} 
-                            style={{ backgroundColor: user.role !== 'admin' ? '#f8f9fa' : 'white' }} 
+                            style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} 
                         />
                     </div>
                     
@@ -491,20 +695,20 @@ function AccountEditor({ user, token, fetchUser }) {
                             className="form-input" 
                             readOnly={user.role !== 'admin'} 
                             disabled={user.role !== 'admin'} 
-                            style={{ backgroundColor: user.role !== 'admin' ? '#f8f9fa' : 'white' }} 
+                            style={{ backgroundColor: user.role !== 'admin' ? '#f3f4f6' : 'white' }} 
                         />
                     </div>
 
                 </div>
                 <div className="form-group"><label>Nouveau mot de passe (optionnel)</label><PasswordInput name="password" value={formData.password} onChange={handleChange} placeholder="Laisser vide pour conserver le mot de passe actuel" /></div>
-                <button type="submit" className="btn btn-primary">Enregistrer les modifications</button>
+                <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>Enregistrer les modifications</button>
             </form>
         </div>
     );
 }
 
-// --- OcrUploader (UPDATED: Drag and Drop with Linux/Brave Fixes) ---
-function OcrUploader({ token, onUpload, onCancel }) {
+// --- OcrUploader (UPDATED: Drag and Drop with Linux/Brave Fixes AND Integrated UI) ---
+function OcrUploader({ token, onUpload }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState('');
     const [destination, setDestination] = useState('');
@@ -579,6 +783,12 @@ function OcrUploader({ token, onUpload, onCancel }) {
         }
     };
 
+    const handleReset = () => {
+        setFile(null);
+        setDestination('');
+        setError('');
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!file) {
@@ -596,10 +806,10 @@ function OcrUploader({ token, onUpload, onCancel }) {
     };
 
     return (
-        <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}>
-            <h3>Ajouter un Passeport via Téléchargement de Document</h3>
+        <div className="form-container" style={{ maxWidth: 'none', margin: '0 0 2rem 0', padding: '2.5rem' }}>
+            <h3 style={{ marginTop: 0 }}>Ajouter un Passeport</h3>
             <p className="mb-2" style={{ color: 'var(--secondary-color)' }}>
-                Téléchargez une image claire ou un PDF. Le traitement se fera en arrière-plan et l'état apparaîtra dans le moniteur de suivi.
+                Glissez votre document ci-dessous pour lancer l'extraction automatique.
             </p>
 
             {error && <p className="error-message">{error}</p>}
@@ -614,7 +824,7 @@ function OcrUploader({ token, onUpload, onCancel }) {
                         onChange={(e) => setDestination(e.target.value)}
                         className="form-input"
                         list="destination-datalist-ocr"
-                        placeholder="Choisissez ou créez une destination pour tous les passeports de ce fichier"
+                        placeholder="Ex: Voyage Japon 2024"
                         autoComplete="off"
                     />
                     <datalist id="destination-datalist-ocr">
@@ -623,7 +833,7 @@ function OcrUploader({ token, onUpload, onCancel }) {
                 </div>
 
                 <div className="form-group">
-                    <label>Document de Passeport (Image ou PDF)</label>
+                    <label>Document (Image ou PDF)</label>
                     
                     <div 
                         className={`drop-zone ${isDragging ? 'active' : ''}`}
@@ -641,14 +851,17 @@ function OcrUploader({ token, onUpload, onCancel }) {
                             style={{ display: 'none' }}
                         />
                         <UploadIcon />
-                        <p>{file ? `Fichier sélectionné : ${file.name}` : "Glissez-déposez votre document ici ou cliquez pour parcourir"}</p>
+                        <p style={{ fontWeight: 600, color: '#374151' }}>
+                            {file ? `Fichier prêt : ${file.name}` : "Cliquez ou glissez votre fichier ici"}
+                        </p>
+                        {!file && <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>PNG, JPG ou PDF jusqu'à 10Mo</p>}
                     </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-                    <button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button>
+                    <button type="button" onClick={handleReset} className="btn" style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>Annuler</button>
                     <button type="submit" className="btn btn-primary" disabled={!file}>
-                        Télécharger et Extraire
+                        Lancer l'analyse
                     </button>
                 </div>
             </form>
@@ -656,12 +869,11 @@ function OcrUploader({ token, onUpload, onCancel }) {
     );
 }
 
-// --- OcrJobMonitor (UNCHANGED) ---
+// --- OcrJobMonitor (UPDATED: Failures Auto-Displayed) ---
 function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-    const [expandedJobId, setExpandedJobId] = useState(null);
     
     const knownCompletedRef = useRef(new Set());
 
@@ -709,12 +921,7 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         }
     }, [refreshTrigger, fetchJobs]);
 
-    const toggleJobDetails = (jobId) => {
-        setExpandedJobId(prev => (prev === jobId ? null : jobId));
-    };
-
     const handleRemoveJob = async (jobIdToRemove) => {
-        setExpandedJobId(null);
         if (!window.confirm("Voulez-vous vraiment supprimer ce job ?")) return;
         try {
             const response = await fetch(`${API_URL}/ocr/jobs/${jobIdToRemove}`, {
@@ -738,7 +945,7 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         if (!dateString) return '';
         return new Date(dateString).toLocaleString('fr-FR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            hour: '2-digit', minute: '2-digit'
         });
     };
 
@@ -760,40 +967,34 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
         }
     }
 
-    if (isLoading && !uploadingFile && jobs.length === 0) return <p className="info-message">Chargement des jobs de Télétraitement...</p>;
+    if (isLoading && !uploadingFile && jobs.length === 0) return null; // Hide if empty
     if (error) return <p className="error-message">{error}</p>;
 
     return (
         <div className="job-monitor">
-            <h3>Suivi des Téléchargements de Passeports</h3>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Fichiers en cours de traitement</h3>
             
             {displayJobs.length === 0 ? (
-                <p className="info-message">Aucun document n'a encore été téléchargé.</p>
+                <p className="info-message">Aucun document récent.</p>
             ) : (
                 <ul className="job-list">
                     {displayJobs.map(job => (
                         <li key={job.id} className="job-item">
                             <div className="job-header">
                                 <div className="job-details">
-                                    <strong>{job.file_name}</strong>
-                                    <br />
+                                    <strong style={{ display: 'block', marginBottom: '0.25rem' }}>{job.file_name}</strong>
                                     <small style={{ color: 'var(--secondary-color)' }}>
                                         {formatDate(job.created_at)}
                                     </small>
                                 </div>
                                 <div className="job-actions">
-                                     {(job.status === 'complete' || job.status === 'failed') && (
-                                        <button className="job-results-toggle" onClick={() => toggleJobDetails(job.id)}>
-                                            {expandedJobId === job.id ? 'Cacher' : 'Voir'} les Résultats
-                                        </button>
-                                     )}
                                      {job.id !== 'temp-virtual-id' && (
                                          <button 
                                               onClick={() => handleRemoveJob(job.id)} 
                                               className="btn btn-danger"
-                                              style={{ padding: '0.25rem 0.75rem', fontSize: '0.9rem', marginLeft: '0.5rem' }}
+                                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', marginLeft: '0.5rem' }}
                                          >
-                                              Supprimer
+                                              X
                                          </button>
                                      )}
                                 </div>
@@ -801,25 +1002,18 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                             
                             <ProgressBar progress={job.progress} status={job.status} />
 
-                            {expandedJobId === job.id && (
-                                <div className="job-results-details">
-                                    <p className="results-summary">
-                                        Traitement Terminé : {job.successes.length} réussis, {job.failures.length} échoués.
-                                    </p>
-                                    <ul className="results-list">
-                                        {job.successes.map(success => (
-                                            <li key={success.data.id} className="result-success">
-                                                <span className="result-icon"><SuccessIcon /></span>
-                                                <span><b>Page {success.page_number}</b> traitée : Passeport créé pour <b>{success.data.first_name} {success.data.last_name}</b> (N° : {success.data.passport_number}).</span>
-                                            </li>
-                                        ))}
-                                        {job.failures.map((failure, index) => (
-                                            <li key={index} className="result-failure">
-                                                <span className="result-icon"><FailureIcon /></span>
-                                                <span><b>La page {failure.page_number} a échoué :</b> {failure.detail}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
+                            {/* ALWAYS SHOW FAILURES AUTOMATICALLY */}
+                            {job.failures.length > 0 && (
+                                <div className="failure-list">
+                                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#b91c1c' }}>
+                                        Échecs détectés ({job.failures.length}):
+                                    </div>
+                                    {job.failures.map((failure, index) => (
+                                        <div key={index} className="failure-item">
+                                            <FailureIcon />
+                                            <span><b>Page {failure.page_number}</b> : {failure.detail}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </li>
@@ -835,9 +1029,12 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [editingItem, setEditingItem] = useState(null);
     const [isCreating, setIsCreating] = useState(false);
     const [filters, setFilters] = useState({});
-    const [showOcrUploader, setShowOcrUploader] = useState(false);
     const [dynamicDestinations, setDynamicDestinations] = useState([]);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    
+    // Bulk Edit State
+    const [isBulkEditingDest, setIsBulkEditingDest] = useState(false);
+    const [bulkDestination, setBulkDestination] = useState('');
     
     const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
     const [uploadingFile, setUploadingFile] = useState(null);
@@ -881,6 +1078,8 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             else console.error("Échec de la récupération des données pour", endpoint);
         } catch (error) { console.error("Erreur lors de la récupération des données:", error); }
         setSelectedIds(new Set());
+        setIsBulkEditingDest(false); // Reset bulk edit mode
+        setBulkDestination('');
     }, [endpoint, token, filters]);
     
     useEffect(() => { fetchData(); }, [fetchData]);
@@ -895,14 +1094,12 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const handleSave = () => { 
         setEditingItem(null); 
         setIsCreating(false); 
-        setShowOcrUploader(false); 
         setSelectedIds(new Set());
         fetchData(); 
     };
 
     const handleUpload = async (formData, fileObj) => {
         setUploadingFile(fileObj);
-        setShowOcrUploader(false);
         setSelectedIds(new Set());
 
         try {
@@ -935,7 +1132,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const handleCancel = () => {
         setEditingItem(null);
         setIsCreating(false);
-        setShowOcrUploader(false);
         setSelectedIds(new Set());
     }
 
@@ -995,13 +1191,92 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         }
     };
 
-    if (showOcrUploader) {
-        return <OcrUploader 
-            token={token} 
-            onUpload={handleUpload} 
-            onCancel={() => setShowOcrUploader(false)} 
-        />
-    }
+    // --- BULK EXPORT LOGIC ---
+    const handleBulkExport = () => {
+        const selectedItems = items.filter(item => selectedIds.has(item.id));
+        if (selectedItems.length === 0) return;
+
+        // Define headers based on fields
+        const keys = Object.keys(fields).filter(k => k !== 'password');
+        // Add ID and manually computed fields if necessary
+        const allKeys = ['id', ...keys];
+        
+        const headerRow = allKeys.map(k => columnTranslations[k] || k).join(',');
+        
+        const rows = selectedItems.map(item => {
+            return allKeys.map(key => {
+                let val = item[key];
+                // Handle destination specifically if it's not in the base item but in voyages
+                if (key === 'destination' && (!val && item.voyages && item.voyages.length > 0)) {
+                    val = item.voyages[0].destination;
+                }
+                if (val === null || val === undefined) val = '';
+                // Escape commas/quotes if needed
+                const stringVal = String(val);
+                if (stringVal.includes(',')) return `"${stringVal}"`;
+                return stringVal;
+            }).join(',');
+        });
+
+        const csvContent = [headerRow, ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'selection_passeports.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // --- BULK DESTINATION EDIT LOGIC ---
+    const handleBulkEditSubmit = async (e) => {
+        e.preventDefault();
+        if (!bulkDestination) return;
+
+        // We will loop through selected IDs and update them one by one.
+        // Ideally backend should support bulk update, but per instructions we use existing endpoints where possible.
+        // We use the PUT /passports/{id} endpoint.
+        
+        // We need to fetch the existing data for each passport first to avoid overwriting other fields?
+        // Actually, the PUT endpoint expects a full PassportCreate object usually.
+        // Let's look at `update_passport` in backend. It takes `PassportCreate`.
+        // `PassportCreate` has optional fields. 
+        // `crud.update_passport` updates fields present in the update_data. 
+        // So we can send ONLY the destination if the Pydantic model allows optionals.
+        // Checking schemas.PassportCreate: all fields are mandatory in Base except confidence_score.
+        // Wait, PassportCreate inherits PassportBase. PassportBase fields are mandatory (first_name, etc).
+        // WE MUST merge current data with new destination.
+        
+        const promises = Array.from(selectedIds).map(async (id) => {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            // Prepare payload
+            const payload = {
+                first_name: item.first_name,
+                last_name: item.last_name,
+                birth_date: item.birth_date,
+                expiration_date: item.expiration_date,
+                nationality: item.nationality,
+                passport_number: item.passport_number,
+                confidence_score: item.confidence_score,
+                destination: bulkDestination // THE CHANGE
+            };
+
+            return fetch(`${API_URL}/passports/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+        });
+
+        await Promise.all(promises);
+        fetchData(); // Refresh and reset selection
+    };
 
     if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={handleCancel} fields={fields} endpoint={endpoint} token={token} />;
 
@@ -1013,35 +1288,68 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     return (
         <div>
             {endpoint === 'passports' && (
-                <OcrJobMonitor 
-                    token={token} 
-                    refreshTrigger={refreshJobsTrigger}
-                    onJobComplete={handleJobComplete}
-                    uploadingFile={uploadingFile}
-                />
+                <>
+                    {/* Integrated Uploader */}
+                    <OcrUploader 
+                        token={token} 
+                        onUpload={handleUpload} 
+                    />
+                    
+                    {/* Job Monitor */}
+                    <OcrJobMonitor 
+                        token={token} 
+                        refreshTrigger={refreshJobsTrigger}
+                        onJobComplete={handleJobComplete}
+                        uploadingFile={uploadingFile}
+                    />
+                </>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    
+                    {/* Bulk Actions for Passports */}
                     {endpoint === 'passports' && selectedIds.size > 0 && (
-                        <button onClick={handleMultiDelete} className="btn btn-danger">
-                            Supprimer la sélection ({selectedIds.size})
-                        </button>
+                        <>
+                            {isBulkEditingDest ? (
+                                <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input 
+                                        type="text" 
+                                        className="form-input" 
+                                        placeholder="Nouvelle destination" 
+                                        value={bulkDestination}
+                                        onChange={e => setBulkDestination(e.target.value)}
+                                        required
+                                        style={{ padding: '0.4rem', width: '200px' }}
+                                    />
+                                    <button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button>
+                                    <button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button>
+                                </form>
+                            ) : (
+                                <>
+                                    <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>
+                                        Modifier Destination
+                                    </button>
+                                    <button onClick={handleBulkExport} className="btn" style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>
+                                        Exporter (.csv)
+                                    </button>
+                                    <button onClick={handleMultiDelete} className="btn btn-danger">
+                                        Supprimer ({selectedIds.size})
+                                    </button>
+                                </>
+                            )}
+                        </>
                     )}
-                    {endpoint === 'passports' && (
-                        <button onClick={() => setShowOcrUploader(true)} className="btn btn-primary" style={{ backgroundColor: 'var(--success-color)' }}>
-                            + Ajouter par Téléchargement
-                        </button>
-                    )}
-                    <button onClick={startCreating} className="btn btn-primary">
-                        {endpoint === 'passports' ? '+ Ajouter Manuellement' : '+ Ajouter'}
+                    
+                    <button onClick={startCreating} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>
+                        {endpoint === 'passports' ? '+ Manuel' : '+ Nouveau'}
                     </button>
                 </div>
             </div>
 
             {endpoint.includes('users') && !filterConfig && (
-                <div className="filter-bar mb-2"><div className="form-group" style={{ flex: 1, marginBottom: 0 }}><input type="text" name="name_filter" placeholder="Filtrer par Nom, Nom d'utilisateur ou Email" onChange={(e) => handleFilterChange(e.target.name, e.target.value)} className="form-input" autoComplete="off"/></div></div>
+                <div className="filter-bar mb-2"><div className="form-group" style={{ flex: 1, marginBottom: 0 }}><input type="text" name="name_filter" placeholder="Rechercher (Nom, Email...)" onChange={(e) => handleFilterChange(e.target.name, e.target.value)} className="form-input" autoComplete="off"/></div></div>
             )}
             
             {filterConfig && (
@@ -1085,7 +1393,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {items.map(item => (
+                        {items.length === 0 ? (
+                            <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr>
+                        ) : items.map(item => (
                             <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
                                 {endpoint === 'passports' && (
                                     <td className="checkbox-cell">
@@ -1100,14 +1410,16 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                                 )}
                                 {Object.keys(displayFields).map(field => {
                                     let cellValue = item[field];
-                                    if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(2)}%`; }
+                                    if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; }
                                     return <td key={field}>{String(cellValue)}</td>
                                 })}
                                 <td>
-                                    <button onClick={() => setEditingItem(item)} className="btn" style={{ backgroundColor: 'var(--warning-color)', color: 'black', marginRight: '0.5rem' }}>Modifier</button>
-                                    {endpoint !== 'passports' && (
-                                        <button onClick={() => handleDelete(item.id)} className="btn btn-danger">Supprimer</button>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={() => setEditingItem(item)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', backgroundColor: '#e0e7ff', color: '#4338ca' }}>Edit</button>
+                                        {endpoint !== 'passports' && (
+                                            <button onClick={() => handleDelete(item.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Suppr</button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -1118,63 +1430,10 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     );
 }
 
-function CrudForm({ item, isCreating, onSave, onCancel, fields, endpoint, token }) {
-    const [formData, setFormData] = useState(item);
-    const [destinations, setDestinations] = useState([]);
-    const [error, setError] = useState('');
-    useEffect(() => {
-        const initialData = { ...item };
-        Object.entries(fields).forEach(([key, type]) => { if (type === 'datetime-local' && initialData[key]) { initialData[key] = new Date(initialData[key]).toISOString().slice(0, 16); } });
-        if (endpoint === 'passports' && !isCreating && item.voyages && item.voyages.length > 0) { initialData.destination = item.voyages[0].destination; }
-        setFormData(initialData);
-    }, [item, fields, endpoint, isCreating]);
-    
-    useEffect(() => {
-        if (endpoint === 'passports') {
-            const fetchDestinations = async () => {
-                try {
-                    const response = await fetch(`${API_URL}/destinations/`, { headers: { 'Authorization': `Bearer ${token}` } });
-                    if (response.ok) setDestinations(await response.json());
-                } catch (error) { console.error("Échec de la récupération des destinations:", error); }
-            };
-            fetchDestinations();
-        }
-    }, [endpoint, token]);
-
-    const handleChange = (e) => { const { name, value, type, checked } = e.target; setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value }); };
-    const handleSubmit = async (e) => {
-        e.preventDefault(); setError('');
-        let url = isCreating ? `${API_URL}/${endpoint}/` : `${API_URL}/${endpoint}/${item.id}`;
-        let method = isCreating ? 'POST' : 'PUT';
-        let body = { ...formData };
-        if (body.confidence_score === '') { body.confidence_score = null; }
-        if (endpoint === 'admin/invitations' && isCreating) body = { email: formData.email };
-        if (endpoint === 'admin/users' && !isCreating && !body.password) delete body.password;
-        
-        if (endpoint === 'admin/users') {
-            body.uploaded_pages_count = parseInt(body.uploaded_pages_count, 10) || 0;
-            // Ensure page_credits is sent as an integer
-            body.page_credits = parseInt(body.page_credits, 10) || 0;
-        }
-        
-        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body), });
-        if (response.ok) { onSave(); } else { 
-            const errorData = await response.json(); 
-            setError(errorData.detail || "Échec de l'enregistrement de l'élément."); 
-        }
-    };
-    const formFields = { ...fields };
-    if (formFields.confidence_score) { delete formFields.confidence_score; }
-    if (isCreating && endpoint === 'admin/invitations') { return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>Créer une nouvelle invitation</h3>{error && <p className="error-message">{error}</p>}<div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email || ''} onChange={handleChange} className="form-input" required /></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>) }
-    return (<form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}><h3>{isCreating ? 'Créer' : 'Modifier'} l'élément</h3>{error && <p className="error-message">{error}</p>}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>{Object.entries(formFields).map(([key, type]) => (<div className="form-group" key={key}><label>{columnTranslations[key] || key.replace(/_/g, ' ')}</label>{key === 'password' ? (<PasswordInput name={key} value={formData[key] || ''} onChange={handleChange} placeholder={!isCreating ? 'Laisser vide pour conserver' : ''} required={isCreating} />) : key === 'destination' ? (<><input type="text" name="destination" value={formData.destination || ''} onChange={handleChange} className="form-input" list="destination-datalist-form" placeholder="Choisissez ou créez une destination" autoComplete="off" /><datalist id="destination-datalist-form">{destinations.map(dest => <option key={dest} value={dest} />)}</datalist></>) : type === 'checkbox' ? (<input type="checkbox" name={key} checked={!!formData[key]} onChange={handleChange} className="form-checkbox" />) : (<input type={type} name={key} value={formData[key] || ''} onChange={handleChange} className="form-input" required={key !== 'destination' && key !== 'token' && type !== 'checkbox' && key !== 'uploaded_pages_count' && key !== 'page_credits'} readOnly={(key === 'token')} />)}</div>))}</div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}><button type="button" onClick={onCancel} className="btn" style={{ backgroundColor: 'var(--secondary-color)', color: 'white' }}>Annuler</button><button type="submit" className="btn btn-primary">Enregistrer</button></div></form>);
-}
-
 function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
     const [filters, setFilters] = useState({ user_id: '', destination: '' });
     const [previewData, setPreviewData] = useState(null);
-    const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteMsg, setInviteMsg] = useState('');
-    const [invitationLink, setInvitationLink] = useState('');
+    const [collapsed, setCollapsed] = useState(true);
 
     const handleFilterChange = (name, value) => { 
         setFilters(prev => ({ ...prev, [name]: value })); 
@@ -1221,64 +1480,47 @@ function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
         }
     };
 
-    const handleInvite = async () => {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) { setInviteMsg('Veuillez entrer une adresse email valide.'); return; }
-        setInviteMsg('Génération du lien...'); setInvitationLink('');
-        try {
-            const response = await fetch(`${API_URL}/admin/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ email: inviteEmail }), });
-            const data = await response.json();
-            if (response.ok) { const link = `${window.location.origin}/register/${data.token}`; setInvitationLink(link); setInviteMsg('Lien généré. Copiez-le et envoyez-le à l\'utilisateur.'); } else { setInviteMsg(data.detail || 'Échec de la création de l\'invitation.'); }
-        } catch (error) { setInviteMsg('Une erreur est survenue.'); }
-    };
-
     return (
-        <div>
-            <h2>Outils & Exportation</h2>
-            {user.role === 'admin' && (
-                <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem', marginBottom: '2rem' }}>
-                    <h3>Inviter un nouvel utilisateur</h3>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <input type="email" placeholder="Entrez l'email de l'utilisateur" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="form-input" style={{ flexGrow: 1 }} />
-                        <button onClick={handleInvite} className="btn btn-primary" style={{ backgroundColor: 'var(--warning-color)', color: 'black' }}>Générer le lien</button>
+        <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
+                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#4b5563' }}>Exportation des Données</h3>
+                 <span style={{ fontSize: '1.5rem', color: '#9ca3af' }}>{collapsed ? '+' : '-'}</span>
+            </div>
+            
+            {!collapsed && (
+                <div style={{ marginTop: '1.5rem' }}>
+                    <div className="filter-bar mb-1">
+                        {user.role === 'admin' && (
+                            <ComboBoxFilter 
+                                name="user_id" 
+                                placeholder="Tous les utilisateurs" 
+                                options={adminUsers} 
+                                getOptionValue={(o) => o.id} 
+                                getOptionLabel={(o) => `${o.first_name} ${o.last_name}`} 
+                                onChange={handleFilterChange} 
+                            />
+                        )}
+                          <ComboBoxFilter 
+                            name="destination" 
+                            placeholder="Toutes destinations" 
+                            options={userDestinations.map(d => ({ destination: d }))} 
+                            getOptionValue={(o) => o.destination} 
+                            getOptionLabel={(o) => o.destination} 
+                            onChange={handleFilterChange} 
+                        />
                     </div>
-                    {inviteMsg && <p className="info-message mt-1">{inviteMsg}</p>}
-                    {invitationLink && (
-                        <div className="mt-1">
-                            <input type="text" readOnly value={invitationLink} className="form-input" onClick={e => e.target.select()} />
-                        </div>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                         <button onClick={handlePreview} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>Aperçu</button>
+                         <button onClick={handleExport} className="btn btn-primary">Télécharger CSV</button>
+                    </div>
+                    
+                    {previewData && (
+                        <>
+                            <PreviewTable data={previewData} />
+                        </>
                     )}
                 </div>
             )}
-            <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '2rem' }}>
-                <h3>Filtrer et Exporter les Données des Passeports</h3>
-                <div className="filter-bar mb-1">
-                    {user.role === 'admin' && (
-                        <ComboBoxFilter 
-                            name="user_id" 
-                            placeholder="Filtrer par Utilisateur" 
-                            options={adminUsers} 
-                            getOptionValue={(o) => o.id} 
-                            getOptionLabel={(o) => `${o.first_name} ${o.last_name} (${o.user_name})`} 
-                            onChange={handleFilterChange} 
-                        />
-                    )}
-                      <ComboBoxFilter 
-                        name="destination" 
-                        placeholder="Filtrer par Destination" 
-                        options={userDestinations.map(d => ({ destination: d }))} 
-                        getOptionValue={(o) => o.destination} 
-                        getOptionLabel={(o) => o.destination} 
-                        onChange={handleFilterChange} 
-                    />
-                </div>
-                <button onClick={handlePreview} className="btn btn-primary">Aperçu des Données</button>
-                {previewData && (
-                    <>
-                        <PreviewTable data={previewData} />
-                        <button onClick={handleExport} className="btn mt-1" style={{ backgroundColor: 'var(--success-color)', color: 'white' }}>Télécharger en CSV</button>
-                    </>
-                )}
-            </div>
         </div>
     );
 }
@@ -1308,9 +1550,9 @@ function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionL
 }
 
 function PreviewTable({ data }) {
-    if (!data || data.length === 0) return <p className="mt-2 text-center info-message">Aucune donnée à prévisualiser pour les filtres sélectionnés.</p>;
+    if (!data || data.length === 0) return <p className="mt-2 text-center info-message">Aucune donnée trouvée.</p>;
     const headers = Object.keys(data[0]);
-    return (<div className="mt-2"><h3 className="mb-1">Aperçu des Données</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
+    return (<div className="mt-2"><h3 className="mb-1">Aperçu</h3><div className="table-container"><table className="table"><thead><tr>{headers.map(h => <th key={h}>{columnTranslations[h] || h.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{data.map((row, i) => <tr key={i}>{headers.map(h => <td key={h}>{String(row[h])}</td>)}</tr>)}</tbody></table></div></div>);
 }
 
-//  --------------- END OF FILE: ../frontend/src/App.jsx ---------------
+// --------------- END OF FILE: ../frontend/src/App.jsx ---------------
