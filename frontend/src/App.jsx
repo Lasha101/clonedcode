@@ -1,6 +1,4 @@
-// --------------- START OF FILE: ../frontend/src/App.jsx ---------------
-
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // Use the build-time environment variable if it exists,
 // otherwise fall back to '/api' for local development.
@@ -199,7 +197,64 @@ const GlobalStyles = () => (
         .table-container { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: white; }
         .table { width: 100%; border-collapse: separate; border-spacing: 0; }
         .table th, .table td { padding: 1rem 1.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
-        .table thead th { background-color: #f9fafb; font-weight: 600; color: #374151; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        
+        /* UPDATED TABLE HEADERS FOR SORTING */
+        .table thead th { 
+            background-color: #f9fafb; 
+            font-weight: 600; 
+            color: #374151; 
+            font-size: 0.85rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+            user-select: none;
+        }
+        .table thead th.sortable { 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            position: relative;
+        }
+        .table thead th.sortable:hover { 
+            background-color: #e5e7eb; 
+            color: var(--primary-color);
+        }
+        
+        /* SORT UI ELEMENTS */
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .sort-checkbox {
+            cursor: pointer;
+            accent-color: var(--primary-color);
+            width: 1rem;
+            height: 1rem;
+        }
+        .sort-badge { 
+            display: inline-flex; 
+            align-items: center;
+            margin-left: 0.5rem; 
+            font-size: 0.9em;
+            color: var(--primary-color);
+            background: #eef2ff;
+            padding: 0px 4px;
+            border-radius: 4px;
+        }
+        .sort-badge small {
+            font-size: 0.7em;
+            margin-left: 2px;
+            font-weight: 800;
+        }
+        .sort-indicator {
+            margin-left: auto;
+            color: #9ca3af;
+            font-size: 0.8em;
+        }
+        .sort-indicator.active {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
         .table tbody tr:last-child td { border-bottom: none; }
         .table tbody tr { transition: background-color 0.1s; }
         .table tbody tr:hover { background-color: #f9fafb; }
@@ -566,16 +621,9 @@ function Dashboard({ user, token, fetchUser }) {
 }
 
 function PassportsPage({ token, user, adminUsers, userDestinations, fields, filterConfig }) {
+    // ToolsAndExportPanel removed and logic merged into CrudManager
     return (
         <div>
-            <div className="tools-section" style={{ marginBottom: '2rem' }}>
-                <ToolsAndExportPanel 
-                    token={token} 
-                    user={user} 
-                    adminUsers={adminUsers} 
-                    userDestinations={userDestinations} 
-                />
-            </div>
             <CrudManager 
                 title="Mes Passeports" 
                 endpoint="passports" 
@@ -583,6 +631,9 @@ function PassportsPage({ token, user, adminUsers, userDestinations, fields, filt
                 user={user} 
                 fields={fields} 
                 filterConfig={filterConfig} 
+                // Pass data needed for the export panel
+                adminUsers={adminUsers}
+                userDestinations={userDestinations}
             />
         </div>
     );
@@ -895,68 +946,7 @@ function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionL
     );
 }
 
-function ToolsAndExportPanel({ token, user, adminUsers, userDestinations }) {
-    const [filters, setFilters] = useState({ user_id: '', destination: '' });
-    const [previewData, setPreviewData] = useState(null);
-    const [collapsed, setCollapsed] = useState(true);
-
-    const handleFilterChange = (name, value) => { setFilters(prev => ({ ...prev, [name]: value })); setPreviewData(null); };
-    const getFilteredData = async () => {
-        const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
-        if (user.role !== 'admin') { delete activeFilters.user_id; }
-        const query = new URLSearchParams(activeFilters).toString();
-        try {
-            const response = await fetch(`${API_URL}/export/data?${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (!response.ok) { const err = await response.json(); alert(`Échec de la récupération des données: ${err.detail}`); return null; }
-            return response;
-        } catch (error) { alert('Une erreur est survenue lors de la récupération des données.'); return null; }
-    };
-    const handlePreview = async () => {
-        const response = await getFilteredData();
-        if (response) {
-            const csvText = await response.text();
-            if (!csvText) { setPreviewData([]); return; }
-            const rows = csvText.trim().split('\n');
-            const headers = rows[0].split(',');
-            const data = rows.slice(1).map(row => { const values = row.split(','); return headers.reduce((obj, h, i) => ({ ...obj, [h]: values[i] }), {}); });
-            setPreviewData(data);
-        }
-    };
-    const handleExport = async () => {
-        const response = await getFilteredData();
-        if (response) {
-            const blob = await response.blob();
-            const contentDisposition = response.headers.get('content-disposition');
-            const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'passports_export.csv';
-            const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-            setPreviewData(null);
-        }
-    };
-
-    return (
-        <div className="form-container" style={{ maxWidth: 'none', margin: 0, padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: 'none' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
-                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#4b5563' }}>Exportation des Données</h3>
-                 <span style={{ fontSize: '1.5rem', color: '#9ca3af' }}>{collapsed ? '+' : '-'}</span>
-            </div>
-            {!collapsed && (
-                <div style={{ marginTop: '1.5rem' }}>
-                    <div className="filter-bar mb-1">
-                        {user.role === 'admin' && ( <ComboBoxFilter name="user_id" placeholder="Tous les utilisateurs" options={adminUsers} getOptionValue={(o) => o.id} getOptionLabel={(o) => `${o.first_name} ${o.last_name}`} onChange={handleFilterChange} /> )}
-                        <ComboBoxFilter name="destination" placeholder="Toutes destinations" options={userDestinations.map(d => ({ destination: d }))} getOptionValue={(o) => o.destination} getOptionLabel={(o) => o.destination} onChange={handleFilterChange} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                         <button onClick={handlePreview} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>Aperçu</button>
-                         <button onClick={handleExport} className="btn btn-primary">Télécharger CSV</button>
-                    </div>
-                    {previewData && ( <PreviewTable data={previewData} /> )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
+function CrudManager({ title, endpoint, token, user, fields, filterConfig, adminUsers, userDestinations }) {
     const [items, setItems] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -967,6 +957,13 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     const [bulkDestination, setBulkDestination] = useState('');
     const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
     const [uploadingFile, setUploadingFile] = useState(null);
+    
+    // --- SORTING STATE ---
+    const [sortConfig, setSortConfig] = useState([]); // Array of { key, direction }
+
+    // --- INTEGRATED EXPORT PANEL STATE ---
+    const [exportFilters, setExportFilters] = useState({ user_id: '', destination: '' });
+    const [previewData, setPreviewData] = useState(null);
 
     const fetchDestinationsForUser = useCallback(async (userId) => {
         const query = userId ? `?user_id=${userId}` : '';
@@ -1031,28 +1028,69 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
             } catch (err) { alert(`Une erreur est survenue: ${err.message}`); }
         }
     };
-    const handleBulkExport = () => {
-        const selectedItems = items.filter(item => selectedIds.has(item.id));
-        if (selectedItems.length === 0) return;
-        const keys = Object.keys(fields).filter(k => k !== 'password');
-        const allKeys = ['id', ...keys];
-        const headerRow = allKeys.map(k => columnTranslations[k] || k).join(',');
-        const rows = selectedItems.map(item => {
-            return allKeys.map(key => {
-                let val = item[key];
-                if (key === 'destination' && (!val && item.voyages && item.voyages.length > 0)) { val = item.voyages[0].destination; }
-                if (val === null || val === undefined) val = '';
-                const stringVal = String(val);
-                if (stringVal.includes(',')) return `"${stringVal}"`;
-                return stringVal;
-            }).join(',');
-        });
-        const csvContent = [headerRow, ...rows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.setAttribute('download', 'selection_passeports.csv');
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+
+    // --- INTEGRATED EXPORT LOGIC ---
+    const handleExportFilterChange = (name, value) => { setExportFilters(prev => ({ ...prev, [name]: value })); setPreviewData(null); };
+    
+    const getServerExportData = async () => {
+        const activeFilters = Object.fromEntries(Object.entries(exportFilters).filter(([, v]) => v));
+        if (user.role !== 'admin') { delete activeFilters.user_id; }
+        const query = new URLSearchParams(activeFilters).toString();
+        try {
+            const response = await fetch(`${API_URL}/export/data?${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) { const err = await response.json(); alert(`Échec de la récupération des données: ${err.detail}`); return null; }
+            return response;
+        } catch (error) { alert('Une erreur est survenue lors de la récupération des données.'); return null; }
     };
+
+    const handlePreview = async () => {
+        const response = await getServerExportData();
+        if (response) {
+            const csvText = await response.text();
+            if (!csvText) { setPreviewData([]); return; }
+            const rows = csvText.trim().split('\n');
+            const headers = rows[0].split(',');
+            const data = rows.slice(1).map(row => { const values = row.split(','); return headers.reduce((obj, h, i) => ({ ...obj, [h]: values[i] }), {}); });
+            setPreviewData(data);
+        }
+    };
+
+    const handleUnifiedExport = async () => {
+        if (selectedIds.size > 0) {
+            // -- EXPORT SELECTION (Client-Side) --
+            const selectedItems = items.filter(item => selectedIds.has(item.id));
+            if (selectedItems.length === 0) return;
+            const keys = Object.keys(fields).filter(k => k !== 'password');
+            const allKeys = ['id', ...keys];
+            const headerRow = allKeys.map(k => columnTranslations[k] || k).join(',');
+            const rows = selectedItems.map(item => {
+                return allKeys.map(key => {
+                    let val = item[key];
+                    if (key === 'destination' && (!val && item.voyages && item.voyages.length > 0)) { val = item.voyages[0].destination; }
+                    if (val === null || val === undefined) val = '';
+                    const stringVal = String(val);
+                    if (stringVal.includes(',')) return `"${stringVal}"`;
+                    return stringVal;
+                }).join(',');
+            });
+            const csvContent = [headerRow, ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a'); link.href = url; link.setAttribute('download', 'selection_passeports.csv');
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        } else {
+            // -- EXPORT FILTERED (Server-Side) --
+            const response = await getServerExportData();
+            if (response) {
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('content-disposition');
+                const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'passports_export.csv';
+                const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+                setPreviewData(null);
+            }
+        }
+    };
+
     const handleBulkEditSubmit = async (e) => {
         e.preventDefault(); if (!bulkDestination) return;
         const promises = Array.from(selectedIds).map(async (id) => {
@@ -1062,6 +1100,85 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         });
         await Promise.all(promises); fetchData();
     };
+
+    // --- UPDATED SORTING LOGIC ---
+    
+    // 1. Toggling the Checkbox adds/removes the column from the sort stack
+    const handleMultiSortToggle = (key, isChecked) => {
+        let newSortConfig = [...sortConfig];
+        
+        if (isChecked) {
+            // Add to end of stack (Last checked = Last priority in array, effectively handled as secondary/tertiary sort)
+            // Wait, standard sort logic usually takes [0] as primary, [1] as secondary.
+            // If I click "Name" first, I want that to be primary. 
+            // If I then click "Date", I want that to be secondary (sorting names by date).
+            // So: Just push to the end.
+            if (!newSortConfig.find(s => s.key === key)) {
+                newSortConfig.push({ key, direction: 'asc' });
+            }
+        } else {
+            // Remove from stack
+            newSortConfig = newSortConfig.filter(s => s.key !== key);
+        }
+        setSortConfig(newSortConfig);
+    };
+
+    // 2. Clicking the Header Text toggles direction (if active) OR sets as Single Sort (if inactive)
+    const handleHeaderClick = (key) => {
+        const existingSortIndex = sortConfig.findIndex(s => s.key === key);
+
+        if (existingSortIndex !== -1) {
+            // It is already active (either single or part of multi-sort).
+            // Just toggle direction. Do NOT clear others.
+            const newSortConfig = [...sortConfig];
+            newSortConfig[existingSortIndex].direction = newSortConfig[existingSortIndex].direction === 'asc' ? 'desc' : 'asc';
+            setSortConfig(newSortConfig);
+        } else {
+            // It is NOT active.
+            // Clicking the text means "I want to sort by THIS only".
+            // Reset stack to just this one.
+            setSortConfig([{ key, direction: 'asc' }]);
+        }
+    };
+
+    const sortedItems = useMemo(() => {
+        let sortableItems = [...items];
+        if (sortConfig.length > 0) {
+            sortableItems.sort((a, b) => {
+                for (const sort of sortConfig) {
+                    const key = sort.key;
+                    const direction = sort.direction;
+                    
+                    let aValue = a[key];
+                    let bValue = b[key];
+
+                    if (aValue === bValue) continue; 
+                    if (aValue === null || aValue === undefined || aValue === '') return 1;
+                    if (bValue === null || bValue === undefined || bValue === '') return -1;
+
+                    const fieldType = fields[key];
+                    if (fieldType === 'number' || typeof aValue === 'number') {
+                         const numA = parseFloat(aValue);
+                         const numB = parseFloat(bValue);
+                         if (numA < numB) return direction === 'asc' ? -1 : 1;
+                         if (numA > numB) return direction === 'asc' ? 1 : -1;
+                    } 
+                    else if (fieldType === 'date' || fieldType === 'datetime-local' || key.includes('date')) {
+                         if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+                         if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+                    }
+                    else {
+                        const strA = String(aValue).toLowerCase();
+                        const strB = String(bValue).toLowerCase();
+                        if (strA < strB) return direction === 'asc' ? -1 : 1;
+                        if (strA > strB) return direction === 'asc' ? 1 : -1;
+                    }
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [items, sortConfig, fields]);
 
     if (editingItem) return <CrudForm item={editingItem} isCreating={isCreating} onSave={handleSave} onCancel={handleCancel} fields={fields} endpoint={endpoint} token={token} />;
 
@@ -1073,13 +1190,36 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
     return (
         <div>
             {endpoint === 'passports' && ( <> <OcrUploader token={token} onUpload={handleUpload} /> <OcrJobMonitor token={token} refreshTrigger={refreshJobsTrigger} onJobComplete={handleJobComplete} uploadingFile={uploadingFile} /> </> )}
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    {endpoint === 'passports' && selectedIds.size > 0 && ( <> {isBulkEditingDest ? ( <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}><input type="text" className="form-input" placeholder="Nouvelle destination" value={bulkDestination} onChange={e => setBulkDestination(e.target.value)} required style={{ padding: '0.4rem', width: '200px' }} /><button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button><button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button></form> ) : ( <> <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>Modifier Destination</button> <button onClick={handleBulkExport} className="btn" style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>Exporter (.csv)</button> <button onClick={handleMultiDelete} className="btn btn-danger">Supprimer ({selectedIds.size})</button> </> )} </> )}
+                    {endpoint === 'passports' && selectedIds.size > 0 && ( <> {isBulkEditingDest ? ( <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}><input type="text" className="form-input" placeholder="Nouvelle destination" value={bulkDestination} onChange={e => setBulkDestination(e.target.value)} required style={{ padding: '0.4rem', width: '200px' }} /><button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button><button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button></form> ) : ( <> <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>Modifier Destination</button> <button onClick={handleMultiDelete} className="btn btn-danger">Supprimer ({selectedIds.size})</button> </> )} </> )}
                     <button onClick={startCreating} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>{endpoint === 'passports' ? '+ Manuel' : '+ Nouveau'}</button>
                 </div>
             </div>
+
+            {/* --- INTEGRATED EXPORT PANEL --- */}
+            {endpoint === 'passports' && (
+                <div className="form-container" style={{ maxWidth: 'none', margin: '0 0 2rem 0', padding: '1.5rem', border: '1px solid #e5e7eb', boxShadow: 'none' }}>
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#4b5563' }}>Exportation des Données</h3>
+                    <div className="filter-bar mb-1" style={{ background: 'transparent', padding: 0, border: 'none' }}>
+                        {user.role === 'admin' && ( 
+                            <ComboBoxFilter name="user_id" placeholder="Tous les utilisateurs" options={adminUsers || []} getOptionValue={(o) => o.id} getOptionLabel={(o) => `${o.first_name} ${o.last_name}`} onChange={handleExportFilterChange} /> 
+                        )}
+                        <ComboBoxFilter name="destination" placeholder="Toutes destinations" options={(userDestinations || []).map(d => ({ destination: d }))} getOptionValue={(o) => o.destination} getOptionLabel={(o) => o.destination} onChange={handleExportFilterChange} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                         <button onClick={handlePreview} className="btn btn-primary" disabled={selectedIds.size > 0} style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', opacity: selectedIds.size > 0 ? 0.5 : 1 }}>Aperçu</button>
+                         <button onClick={handleUnifiedExport} className="btn btn-primary">
+                             {selectedIds.size > 0 ? `Exporter Sélection (${selectedIds.size})` : 'Télécharger CSV'}
+                         </button>
+                    </div>
+                    {previewData && selectedIds.size === 0 && ( <PreviewTable data={previewData} /> )}
+                </div>
+            )}
+            {/* --- END EXPORT PANEL --- */}
+
             {endpoint.includes('users') && !filterConfig && ( <div className="filter-bar mb-2"><div className="form-group" style={{ flex: 1, marginBottom: 0 }}><input type="text" name="name_filter" placeholder="Rechercher (Nom, Email...)" onChange={(e) => handleFilterChange(e.target.name, e.target.value)} className="form-input" autoComplete="off"/></div></div> )}
             {filterConfig && ( <div className="filter-bar mb-2">{filterConfig.map(filter => ( <ComboBoxFilter key={filter.name} {...filter} onChange={handleFilterChange} /> ))} {user.role === 'admin' && endpoint === 'passports' && ( <ComboBoxFilter key="voyage_filter" name="voyage_filter" placeholder="Filtrer par Destination" options={dynamicDestinations.map(d => ({ destination: d }))} getOptionValue={(o) => o.destination} getOptionLabel={(o) => o.destination} onChange={handleFilterChange} /> )} </div> )}
             <div className="table-container">
@@ -1087,12 +1227,46 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
                     <thead>
                         <tr>
                             {endpoint === 'passports' && ( <th className="checkbox-cell"><input type="checkbox" className="form-checkbox" onChange={handleToggleSelectAll} checked={items.length > 0 && selectedIds.size === items.length} aria-label="Sélectionner tout" /></th> )}
-                            {Object.keys(displayFields).map(field => ( <th key={field}>{columnTranslations[field] || field.replace(/_/g, ' ')}</th> ))}
+                            {Object.keys(displayFields).map(field => {
+                                const sortState = sortConfig.find(s => s.key === field);
+                                const sortIndex = sortConfig.findIndex(s => s.key === field);
+                                const isChecked = !!sortState;
+
+                                return ( 
+                                    <th 
+                                        key={field} 
+                                        className="sortable" 
+                                        onClick={(e) => handleHeaderClick(field)}
+                                    >
+                                        <div className="header-content">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sort-checkbox" 
+                                                checked={isChecked}
+                                                onClick={(e) => e.stopPropagation()} // Prevent header click trigger
+                                                onChange={(e) => handleMultiSortToggle(field, e.target.checked)}
+                                                title="Activer/Désactiver le tri sur cette colonne"
+                                            />
+                                            <span>{columnTranslations[field] || field.replace(/_/g, ' ')}</span>
+                                            
+                                            {/* Visual Indicator of Direction & Priority */}
+                                            <span className={`sort-indicator ${sortState ? 'active' : ''}`}>
+                                                {sortState ? (
+                                                    <span className="sort-badge">
+                                                        {sortState.direction === 'asc' ? '↑' : '↓'}
+                                                        {sortConfig.length > 1 && <small>{sortIndex + 1}</small>}
+                                                    </span>
+                                                ) : '↕'}
+                                            </span>
+                                        </div>
+                                    </th> 
+                                );
+                            })}
                             <th>{columnTranslations['actions']}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {items.length === 0 ? ( <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr> ) : items.map(item => (
+                        {sortedItems.length === 0 ? ( <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr> ) : sortedItems.map(item => (
                             <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
                                 {endpoint === 'passports' && ( <td className="checkbox-cell"><input type="checkbox" className="form-checkbox" onChange={() => handleToggleSelect(item.id)} checked={selectedIds.has(item.id)} aria-label={`Sélectionner ${item.first_name} ${item.last_name}`} /></td> )}
                                 {Object.keys(displayFields).map(field => { let cellValue = item[field]; if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; } return <td key={field}>{String(cellValue)}</td> })}
@@ -1105,5 +1279,3 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig }) {
         </div>
     );
 }
-
-// --------------- END OF FILE: ../frontend/src/App.jsx ---------------
