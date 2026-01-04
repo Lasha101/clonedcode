@@ -527,6 +527,37 @@ function Dashboard({ user, token, fetchUser }) {
     const [filterableUsers, setFilterableUsers] = useState([]);
     const [userSpecificDestinations, setUserSpecificDestinations] = useState([]);
 
+    // --- SSE CONNECTION EFFECT ---
+    useEffect(() => {
+        if (!token) return;
+
+        // Establish SSE connection
+        // We pass the token in the query string because EventSource doesn't support headers
+        const eventSource = new EventSource(`${API_URL}/events?token=${token}`);
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                // On credit_update, refresh user data
+                if (data.type === 'credit_update') {
+                    fetchUser();
+                }
+            } catch (err) {
+                console.error("Error parsing SSE message:", err);
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            // Connection lost or error, EventSource auto-retries by default, but logging helps
+            // console.warn("SSE Connection lost, retrying...", err);
+        };
+
+        // Cleanup on unmount
+        return () => {
+            eventSource.close();
+        };
+    }, [token, fetchUser]);
+
     const fetchAdminData = useCallback(async () => {
         if (user.role !== 'admin') return;
         try {
@@ -583,6 +614,7 @@ function Dashboard({ user, token, fetchUser }) {
                 return <PassportsPage 
                         token={token} 
                         user={user} 
+                        fetchUser={fetchUser} // Pass fetchUser down
                         adminUsers={filterableUsers} 
                         userDestinations={userSpecificDestinations}
                         fields={passportFields}
@@ -606,6 +638,7 @@ function Dashboard({ user, token, fetchUser }) {
                 <h3>Bienvenue, {user.first_name}!</h3>
                 <div className="credit-display">
                     <span className="credit-badge">Crédits : {user.page_credits}</span>
+                    <span style={{ display: 'block', fontSize: '0.8rem', color: '#6b7280', marginTop: '0.25rem' }}>Pages Traitées : {user.uploaded_pages_count}</span>
                 </div>
                 <div className="nav-menu">
                     <button onClick={() => setActiveTab('passports')} className={`nav-button ${activeTab === 'passports' ? 'active' : ''}`}>Passeports</button>
@@ -620,7 +653,7 @@ function Dashboard({ user, token, fetchUser }) {
     );
 }
 
-function PassportsPage({ token, user, adminUsers, userDestinations, fields, filterConfig }) {
+function PassportsPage({ token, user, fetchUser, adminUsers, userDestinations, fields, filterConfig }) {
     // ToolsAndExportPanel removed and logic merged into CrudManager
     return (
         <div>
@@ -629,6 +662,7 @@ function PassportsPage({ token, user, adminUsers, userDestinations, fields, filt
                 endpoint="passports" 
                 token={token} 
                 user={user} 
+                fetchUser={fetchUser} // Pass fetchUser down to CrudManager
                 fields={fields} 
                 filterConfig={filterConfig} 
                 // Pass data needed for the export panel
@@ -790,7 +824,7 @@ function OcrUploader({ token, onUpload }) {
     );
 }
 
-function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) {
+function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile, fetchUser, containerRef }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -811,10 +845,13 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
                         }
                     }
                 });
-                if (hasNewCompletion) { onJobComplete(); }
+                if (hasNewCompletion) { 
+                    onJobComplete(); 
+                    if (fetchUser) fetchUser(); // Update credits async when job finishes!
+                }
             } else { console.error('Échec de la récupération des jobs OCR.'); }
         } catch (err) { console.error('Une erreur est survenue lors de la récupération des jobs.', err); } finally { setIsLoading(false); }
-    }, [token, onJobComplete]);
+    }, [token, onJobComplete, fetchUser]);
     
     useEffect(() => { fetchJobs(); const interval = setInterval(fetchJobs, 2000); return () => clearInterval(interval); }, [fetchJobs]);
     useEffect(() => { if (refreshTrigger > 0) { fetchJobs(); } }, [refreshTrigger, fetchJobs]);
@@ -844,7 +881,7 @@ function OcrJobMonitor({ token, refreshTrigger, onJobComplete, uploadingFile }) 
     if (error) return <p className="error-message">{error}</p>;
 
     return (
-        <div className="job-monitor">
+        <div className="job-monitor" ref={containerRef}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Fichiers en cours de traitement</h3>
             {displayJobs.length === 0 ? (
                 <p className="info-message">Aucun document récent.</p>
@@ -946,7 +983,7 @@ function ComboBoxFilter({ name, placeholder, options, getOptionValue, getOptionL
     );
 }
 
-function CrudManager({ title, endpoint, token, user, fields, filterConfig, adminUsers, userDestinations }) {
+function CrudManager({ title, endpoint, token, user, fetchUser, fields, filterConfig, adminUsers, userDestinations }) {
     const [items, setItems] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -957,6 +994,9 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig, admin
     const [bulkDestination, setBulkDestination] = useState('');
     const [refreshJobsTrigger, setRefreshJobsTrigger] = useState(0);
     const [uploadingFile, setUploadingFile] = useState(null);
+    
+    // --- SCROLL REF ---
+    const jobMonitorRef = useRef(null);
     
     // --- SORTING STATE ---
     const [sortConfig, setSortConfig] = useState([]); // Array of { key, direction }
@@ -1006,7 +1046,17 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig, admin
         setUploadingFile(fileObj); setSelectedIds(new Set());
         try {
             const response = await fetch(`${API_URL}/passports/upload-and-extract/`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData, });
-            if (!response.ok) { const data = await response.json(); alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`); setUploadingFile(null); } else { setRefreshJobsTrigger(prev => prev + 1); setTimeout(() => { setUploadingFile(null); }, 2000); }
+            if (!response.ok) { const data = await response.json(); alert(`Erreur de téléchargement: ${data.detail || 'Erreur inconnue'}`); setUploadingFile(null); } 
+            else { 
+                setRefreshJobsTrigger(prev => prev + 1); 
+                // --- SCROLL TO JOB MONITOR ---
+                setTimeout(() => {
+                    if (jobMonitorRef.current) {
+                        jobMonitorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+                setTimeout(() => { setUploadingFile(null); }, 2000); 
+            }
         } catch (err) { alert('Une erreur inattendue est survenue lors du téléchargement.'); setUploadingFile(null); }
     };
     const handleJobComplete = useCallback(() => { fetchData(); }, [fetchData]);
@@ -1109,10 +1159,6 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig, admin
         
         if (isChecked) {
             // Add to end of stack (Last checked = Last priority in array, effectively handled as secondary/tertiary sort)
-            // Wait, standard sort logic usually takes [0] as primary, [1] as secondary.
-            // If I click "Name" first, I want that to be primary. 
-            // If I then click "Date", I want that to be secondary (sorting names by date).
-            // So: Just push to the end.
             if (!newSortConfig.find(s => s.key === key)) {
                 newSortConfig.push({ key, direction: 'asc' });
             }
@@ -1158,14 +1204,14 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig, admin
 
                     const fieldType = fields[key];
                     if (fieldType === 'number' || typeof aValue === 'number') {
-                         const numA = parseFloat(aValue);
-                         const numB = parseFloat(bValue);
-                         if (numA < numB) return direction === 'asc' ? -1 : 1;
-                         if (numA > numB) return direction === 'asc' ? 1 : -1;
+                          const numA = parseFloat(aValue);
+                          const numB = parseFloat(bValue);
+                          if (numA < numB) return direction === 'asc' ? -1 : 1;
+                          if (numA > numB) return direction === 'asc' ? 1 : -1;
                     } 
                     else if (fieldType === 'date' || fieldType === 'datetime-local' || key.includes('date')) {
-                         if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-                         if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+                          if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+                          if (aValue > bValue) return direction === 'asc' ? 1 : -1;
                     }
                     else {
                         const strA = String(aValue).toLowerCase();
@@ -1187,14 +1233,17 @@ function CrudManager({ title, endpoint, token, user, fields, filterConfig, admin
     if (endpoint === 'admin/invitations' && isCreating) delete displayFields.token;
     if (endpoint === 'passports') delete displayFields.destination;
 
+    // Use dynamic destinations (if admin looking at a user) or generic user destinations for the bulk list
+    const availableBulkDestinations = (user.role === 'admin' && dynamicDestinations.length > 0) ? dynamicDestinations : userDestinations;
+
     return (
         <div>
-            {endpoint === 'passports' && ( <> <OcrUploader token={token} onUpload={handleUpload} /> <OcrJobMonitor token={token} refreshTrigger={refreshJobsTrigger} onJobComplete={handleJobComplete} uploadingFile={uploadingFile} /> </> )}
+            {endpoint === 'passports' && ( <> <OcrUploader token={token} onUpload={handleUpload} /> <OcrJobMonitor token={token} refreshTrigger={refreshJobsTrigger} onJobComplete={handleJobComplete} uploadingFile={uploadingFile} fetchUser={fetchUser} containerRef={jobMonitorRef} /> </> )}
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="mb-2">
                 <h2>{title}</h2>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    {endpoint === 'passports' && selectedIds.size > 0 && ( <> {isBulkEditingDest ? ( <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}><input type="text" className="form-input" placeholder="Nouvelle destination" value={bulkDestination} onChange={e => setBulkDestination(e.target.value)} required style={{ padding: '0.4rem', width: '200px' }} /><button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button><button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button></form> ) : ( <> <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>Modifier Destination</button> <button onClick={handleMultiDelete} className="btn btn-danger">Supprimer ({selectedIds.size})</button> </> )} </> )}
+                    {endpoint === 'passports' && selectedIds.size > 0 && ( <> {isBulkEditingDest ? ( <form onSubmit={handleBulkEditSubmit} style={{ display: 'flex', gap: '0.5rem' }}><input type="text" className="form-input" placeholder="Nouvelle destination" value={bulkDestination} onChange={e => setBulkDestination(e.target.value)} list="bulk-dest-list" required style={{ padding: '0.4rem', width: '200px' }} /><datalist id="bulk-dest-list">{availableBulkDestinations && availableBulkDestinations.map(d => <option key={d} value={d} />)}</datalist><button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>OK</button><button type="button" onClick={() => setIsBulkEditingDest(false)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#e5e7eb' }}>X</button></form> ) : ( <> <button onClick={() => setIsBulkEditingDest(true)} className="btn" style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}>Modifier Destination</button> <button onClick={handleMultiDelete} className="btn btn-danger">Supprimer ({selectedIds.size})</button> </> )} </> )}
                     <button onClick={startCreating} className="btn btn-primary" style={{ backgroundColor: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)' }}>{endpoint === 'passports' ? '+ Manuel' : '+ Nouveau'}</button>
                 </div>
             </div>

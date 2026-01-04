@@ -1,3 +1,5 @@
+# --------------- START OF FILE: main.py ---------------
+
 import os
 import pandas as pd
 from contextlib import asynccontextmanager
@@ -15,6 +17,9 @@ from typing import Optional, Dict, List, Any
 import ocr_service
 import logging 
 import uuid 
+import asyncio
+import json
+from jose import jwt, JWTError
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -33,6 +38,52 @@ models.Base.metadata.create_all(bind=engine)
 
 # Initialize the rate limiter
 limiter = Limiter(key_func=get_remote_address)
+
+
+# --- SSE CONNECTION MANAGER ---
+class ConnectionManager:
+    def __init__(self):
+        # Maps user_id -> List of asyncio.Queue
+        self.active_connections: Dict[int, List[asyncio.Queue]] = {}
+
+    async def connect(self, user_id: int):
+        queue = asyncio.Queue()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(queue)
+        logger.info(f"User {user_id} connected to SSE. Total connections: {len(self.active_connections.get(user_id, []))}")
+        return queue
+
+    def disconnect(self, user_id: int, queue: asyncio.Queue):
+        if user_id in self.active_connections:
+            if queue in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(queue)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+        logger.info(f"User {user_id} disconnected from SSE.")
+
+    async def send_update(self, user_id: int, message: dict):
+        """
+        Push a message to all active connections for a specific user.
+        """
+        if user_id in self.active_connections:
+            data_str = json.dumps(message)
+            for queue in self.active_connections[user_id]:
+                await queue.put(data_str)
+            logger.info(f"Sent update to user {user_id}: {message}")
+
+    async def shutdown(self):
+        """
+        Closes all active connections by sending a 'None' signal.
+        This allows the server to shut down gracefully without hanging.
+        """
+        logger.info("Shutting down all SSE connections...")
+        for user_id, queues in self.active_connections.items():
+            for queue in queues:
+                await queue.put(None) # Poison pill to break the loop
+
+# Global manager instance
+manager = ConnectionManager()
 
 
 # --- UPDATED: Background Task Function using DB Persistence & Progress ---
@@ -135,6 +186,10 @@ async def run_ocr_extraction_task(
                 # Decrement credits (allow negative)
                 user.page_credits -= page_count
                 db.commit()
+                
+                # --- SSE NOTIFICATION: NOTIFY USER OF CREDIT CHANGE ---
+                await manager.send_update(user_id, {"type": "credit_update", "credits": user.page_credits})
+                
         except Exception as e:
             logger.error(f"Failed to update page count/credits: {e}")
             db.rollback()
@@ -150,6 +205,7 @@ async def run_ocr_extraction_task(
 # --- Lifespan for application startup/shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- STARTUP ---
     db = SessionLocal()
     # Create a default admin user on startup if one doesn't exist
     admin_user = crud.get_user_by_username(db, username="admin")
@@ -169,8 +225,12 @@ async def lifespan(app: FastAPI):
             )
             crud.create_user(db=db, user=admin, role="admin", token=None)
     db.close()
-    yield
-    # Code to run on shutdown can go here
+    
+    yield # Application runs here
+    
+    # --- SHUTDOWN ---
+    # Crucial: Force all SSE connections to close so Uvicorn can exit
+    await manager.shutdown()
 
 # --- FastAPI App Initialization ---
 app = FastAPI(lifespan=lifespan)
@@ -201,6 +261,55 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
         )
     access_token = auth.create_access_token(data={"sub": user.user_name})
     return {"access_token": access_token, "token_type": "bearer"}
+
+# --- SSE ROUTE FOR REAL-TIME UPDATES (FIXED SHUTDOWN) ---
+@app.get("/events")
+async def events(request: Request, token: str = Query(...), db: Session = Depends(get_db)):
+    """
+    Server-Sent Events endpoint.
+    Gracefully handles disconnection and server shutdown.
+    """
+    try:
+        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = crud.get_user_by_username(db, username=username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    async def event_generator(user_id):
+        queue = await manager.connect(user_id)
+        try:
+            while True:
+                # Check for client disconnect
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for message with a timeout to allow checking connection status
+                    data = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    
+                    # --- POISON PILL CHECK ---
+                    # If manager.shutdown() put None in the queue, we break the loop immediately
+                    if data is None:
+                        break
+                        
+                    yield f"data: {data}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keep-alive comment
+                    yield ": keep-alive\n\n"
+        except asyncio.CancelledError:
+            pass # Graceful exit
+        finally:
+            manager.disconnect(user_id, queue)
+            # logger.info(f"SSE connection closed for user {user_id}")
+
+    return StreamingResponse(event_generator(user.id), media_type="text/event-stream")
+
 
 # --- User Routes ---
 @app.post("/users/", response_model=schemas.User)
@@ -246,11 +355,16 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     return db_user
 
 @app.put("/admin/users/{user_id}", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
-def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+async def update_user_admin(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
     # Admin can update page count and credits
     db_user = crud.update_user(db=db, user_id=user_id, user_update=user_update)
     if db_user is None:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # --- SSE NOTIFICATION: NOTIFY TARGET USER OF UPDATE ---
+    # We trigger a refresh for the user whose account was updated
+    await manager.send_update(user_id, {"type": "credit_update"})
+    
     return db_user
 
 @app.post("/admin/users/", response_model=schemas.User, dependencies=[Depends(auth.require_admin)])
@@ -519,3 +633,4 @@ def delete_invitation(invitation_id: int, db: Session = Depends(get_db)):
 def read_filterable_users(db: Session = Depends(get_db)):
     return crud.get_all_users_for_filtering(db)
 
+# --------------- END OF FILE: main.py ---------------
