@@ -395,6 +395,9 @@ export default function App() {
     const [view, setView] = useState('login');
     const logout = useCallback(() => { localStorage.removeItem('token'); setToken(null); setUser(null); window.history.pushState({}, '', '/'); setView('login'); }, []);
     const fetchUser = useCallback(async () => {
+        const path = window.location.pathname;
+        if (path.startsWith('/register/')) { setView('register'); return; }
+
         const currentToken = localStorage.getItem('token');
         if (currentToken) {
             try {
@@ -402,8 +405,7 @@ export default function App() {
                 if (response.ok) { const data = await response.json(); setUser(data); setView('dashboard'); } else { logout(); }
             } catch (error) { console.error("Échec de la récupération de l'utilisateur:", error); logout(); }
         } else {
-            const path = window.location.pathname;
-            if (path.startsWith('/register/')) { setView('register'); } else { setView('login'); }
+            setView('login');
         }
     }, [logout]);
     useEffect(() => {
@@ -1318,7 +1320,24 @@ function CrudManager({ title, endpoint, token, user, fetchUser, fields, filterCo
                         {sortedItems.length === 0 ? ( <tr><td colSpan={Object.keys(displayFields).length + 2} style={{textAlign: 'center', padding: '2rem', color: '#6b7280'}}>Aucune donnée trouvée.</td></tr> ) : sortedItems.map(item => (
                             <tr key={item.id} className={selectedIds.has(item.id) ? 'selected-row' : ''}>
                                 {endpoint === 'passports' && ( <td className="checkbox-cell"><input type="checkbox" className="form-checkbox" onChange={() => handleToggleSelect(item.id)} checked={selectedIds.has(item.id)} aria-label={`Sélectionner ${item.first_name} ${item.last_name}`} /></td> )}
-                                {Object.keys(displayFields).map(field => { let cellValue = item[field]; if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; } return <td key={field}>{String(cellValue)}</td> })}
+                                {Object.keys(displayFields).map(field => { 
+                                    let cellValue = item[field]; 
+                                    if (field === 'confidence_score' && typeof cellValue === 'number') { cellValue = `${(cellValue * 100).toFixed(0)}%`; } 
+                                    if (field === 'token') {
+                                        const link = `${window.location.origin}/register/${cellValue}`;
+                                        return (
+                                            <td key={field}>
+                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: '300px'}}>
+                                                    <input readOnly value={link} className="form-input" style={{padding: '0.25rem', fontSize: '0.8rem', flex: 1, minWidth: 0}} onClick={(e) => e.target.select()} />
+                                                    <button className="btn" style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', whiteSpace: 'nowrap'}} onClick={() => { navigator.clipboard.writeText(link); }} title="Copier le lien">
+                                                        Copier
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        );
+                                    }
+                                    return <td key={field}>{String(cellValue)}</td> 
+                                })}
                                 <td><div style={{ display: 'flex', gap: '0.5rem' }}><button onClick={() => setEditingItem(item)} className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', backgroundColor: '#e0e7ff', color: '#4338ca' }}>Edit</button>{endpoint !== 'passports' && ( <button onClick={() => handleDelete(item.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Suppr</button> )}</div></td>
                             </tr>
                         ))}

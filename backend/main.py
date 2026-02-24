@@ -601,7 +601,7 @@ def get_invitation(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invitation non trouvée ou invalide.")
     return invitation
 
-@app.post("/admin/invitations", response_model=schemas.Invitation, dependencies=[Depends(auth.require_admin)])
+@app.post("/admin/invitations/", response_model=schemas.Invitation, dependencies=[Depends(auth.require_admin)])
 def create_invitation(invitation: schemas.InvitationCreate, db: Session = Depends(get_db)):
     existing_user = crud.get_user_by_email(db, email=invitation.email)
     if existing_user:
